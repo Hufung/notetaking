@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Modern PDF Editor (Zoom, Pan, Highlight)</title>
+    
+    <style>
+        /* General Setup */
+        :root {
+            --bg-dark: #2c2f33; --bg-medium: #40444b; --bg-light: #525659;
+            --text-light: #ffffff; --text-medium: #b9bbbe; --accent: #7289da;
+        }
+        html, body {
+            margin: 0; padding: 0; height: 100%; width: 100%;
+            overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-light); color: var(--text-light);
+        }
+
+        /* App Layout */
+        .app-container { display: flex; flex-direction: column; height: 100vh; }
+        .main-content { flex-grow: 1; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+
+        /* Toolbar */
+        .toolbar {
+            flex-shrink: 0; background-color: var(--bg-dark); padding: 8px 16px;
+            display: flex; align-items: center; gap: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); z-index: 1000;
+        }
+        .tool-group { display: flex; align-items: center; gap: 8px; border-left: 1px solid var(--bg-light); padding-left: 16px; }
+
+        /* Toolbar Buttons */
+        .tool-btn {
+            background: none; border: 2px solid transparent; border-radius: 8px;
+            padding: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .tool-btn svg { width: 24px; height: 24px; stroke: var(--text-medium); }
+        .tool-btn:hover { background-color: var(--bg-medium); }
+        .tool-btn.active { background-color: var(--bg-medium); border-color: var(--accent); }
+        .tool-btn.active svg { stroke: var(--accent); }
+        .tool-btn:disabled { cursor: not-allowed; opacity: 0.5; }
+
+        /* Tool Properties Bar */
+        #tool-properties { display: flex; align-items: center; gap: 12px; }
+        .prop-item { display: flex; align-items: center; gap: 6px; }
+        input[type="color"] { border: none; background: none; width: 32px; height: 32px; cursor: pointer; border-radius: 50%; overflow: hidden; }
+        input[type="range"] { cursor: pointer; }
+        #stroke-width-label { min-width: 20px; text-align: center; }
+
+        /* PDF Viewer */
+        #pdf-viewer-container {
+            position: relative; box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            touch-action: none; /* Critical for custom touch handling */
+        }
+        #pdf-canvas, #annotation-canvas { position: absolute; top: 0; left: 0; }
+        
+        /* Loading Overlay */
+        #loading-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7);
+            display: none; justify-content: center; align-items: center; z-index: 9999;
+        }
+        .spinner { width: 50px; height: 50px; border: 5px solid var(--bg-light); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Main Toolbar -->
+        <div class="toolbar">
+            <input type="file" id="pdf-upload" accept="application/pdf" style="display: none;">
+            <button class="tool-btn" id="upload-btn" title="Open PDF">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            </button>
+            <span id="page-num-display">No PDF Loaded</span>
+
+            <div class="tool-group">
+                <button class="tool-btn" id="pan-tool" data-tool="pan" title="Pan (Hold Space or Middle Mouse)">
+                     <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </button>
+                 <button class="tool-btn" data-tool="draw" title="Pen">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                </button>
+                <button class="tool-btn" data-tool="highlight" title="Highlighter">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
+                </button>
+                <button class="tool-btn" data-tool="eraser" title="Eraser">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 7.76l-2.49-2.49a1.5 1.5 0 0 0-2.12 0L3.37 17.51l-1.37 4.86 4.86-1.37L19.12 8.88a1.5 1.5 0 0 0 0-2.12zM15 9l3 3"/></svg>
+                </button>
+            </div>
+
+            <div id="tool-properties" class="tool-group"></div>
+
+             <div class="tool-group">
+                <button class="tool-btn" id="reset-view-btn" title="Fit to Screen">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                </button>
+                <button class="tool-btn" id="download-btn" disabled title="Download with Annotations">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Main Content Area -->
+        <div class="main-content" id="main-content">
+            <div id="pdf-viewer-container">
+                <canvas id="pdf-canvas"></canvas>
+                <canvas id="annotation-canvas"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Loading Overlay -->
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.worker.min.js`;
+
+        // DOM Elements
+        const uploadInput = document.getElementById('pdf-upload');
+        const uploadBtn = document.getElementById('upload-btn');
+        const pdfCanvas = document.getElementById('pdf-canvas');
+        const annotationCanvas = document.getElementById('annotation-canvas');
+        const pdfCtx = pdfCanvas.getContext('2d');
+        const annotationCtx = annotationCanvas.getContext('2d');
+        const pageNumDisplay = document.getElementById('page-num-display');
+        const downloadBtn = document.getElementById('download-btn');
+        const viewerContainer = document.getElementById('main-content');
+        const pdfContainer = document.getElementById('pdf-viewer-container');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const toolPropertiesContainer = document.getElementById('tool-properties');
+
+        // State
+        let pdfDoc = null, originalPdfBytes = null, pageNum = 1;
+        let annotations = {};
+        
+        // --- NEW STATE for Zoom, Pan, and Tools ---
+        const state = {
+            transform: { scale: 1, offsetX: 0, offsetY: 0 },
+            isPanning: false,
+            panStart: { x: 0, y: 0 },
+            isDrawing: false,
+            currentPath: null,
+            activeTool: 'draw',
+            toolSettings: {
+                draw: { color: '#ff0000', width: 3 },
+                highlight: { color: '#ffff00', width: 20 },
+                eraser: { width: 20 }
+            }
+        };
+
+        // --- Rendering Engine ---
+        function render() {
+            if (!pdfDoc) return;
+            loadingOverlay.style.display = 'flex';
+            pdfDoc.getPage(pageNum).then(page => {
+                const pdfViewport = page.getViewport({ scale: 1 });
+                pdfCanvas.width = pdfViewport.width;
+                pdfCanvas.height = pdfViewport.height;
+                annotationCanvas.width = pdfViewport.width;
+                annotationCanvas.height = pdfViewport.height;
+
+                // Position the canvas container using the transform
+                const { scale, offsetX, offsetY } = state.transform;
+                pdfContainer.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+                
+                // Render PDF
+                page.render({ canvasContext: pdfCtx, viewport: pdfViewport }).promise.then(() => {
+                    redrawAnnotations();
+                    loadingOverlay.style.display = 'none';
+                });
+            });
+            pageNumDisplay.textContent = `Page ${pageNum} / ${pdfDoc.numPages}`;
+        }
+        
+        function redrawAnnotations() {
+            annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
+            const pageAnnotations = annotations[pageNum] || [];
+            
+            pageAnnotations.forEach(anno => {
+                annotationCtx.beginPath();
+                annotationCtx.moveTo(anno.points[0].x, anno.points[0].y);
+                anno.points.forEach(p => annotationCtx.lineTo(p.x, p.y));
+
+                // Set properties based on type
+                if (anno.type === 'highlight') {
+                    annotationCtx.globalAlpha = 0.4;
+                }
+                
+                annotationCtx.strokeStyle = anno.color;
+                annotationCtx.lineWidth = anno.width;
+                annotationCtx.lineCap = 'round';
+                annotationCtx.lineJoin = 'round';
+                annotationCtx.stroke();
+                
+                // Reset properties
+                annotationCtx.globalAlpha = 1.0;
+            });
+        }
+        
+        function fitToScreen() {
+            if (!pdfDoc) return;
+            pdfDoc.getPage(pageNum).then(page => {
+                const viewport = page.getViewport({ scale: 1 });
+                const scaleX = viewerContainer.clientWidth / viewport.width * 0.95;
+                const scaleY = viewerContainer.clientHeight / viewport.height * 0.95;
+                state.transform.scale = Math.min(scaleX, scaleY);
+                state.transform.offsetX = 0;
+                state.transform.offsetY = 0;
+                render();
+            });
+        }
+
+        // --- Event Handlers ---
+        uploadBtn.addEventListener('click', () => uploadInput.click());
+        uploadInput.addEventListener('change', e => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const fileReader = new FileReader();
+            fileReader.onload = function() {
+                originalPdfBytes = this.result;
+                pdfjsLib.getDocument(new Uint8Array(originalPdfBytes)).promise.then(pdfDoc_ => {
+                    pdfDoc = pdfDoc_; pageNum = 1; annotations = {};
+                    fitToScreen();
+                    downloadBtn.disabled = false;
+                });
+            };
+            fileReader.readAsArrayBuffer(file);
+        });
+
+        document.getElementById('reset-view-btn').addEventListener('click', fitToScreen);
+
+        // Tool Selection
+        document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelector('.tool-btn.active')?.classList.remove('active');
+                btn.classList.add('active');
+                state.activeTool = btn.dataset.tool;
+                updateToolPropertiesUI();
+            });
+        });
+
+        function updateToolPropertiesUI() {
+            toolPropertiesContainer.innerHTML = ''; // Clear previous properties
+            const tool = state.activeTool;
+            if (tool === 'draw' || tool === 'highlight') {
+                const settings = state.toolSettings[tool];
+                toolPropertiesContainer.innerHTML = `
+                    <div class="prop-item">
+                        <input type="color" id="tool-color" value="${settings.color}">
+                    </div>
+                    <div class="prop-item">
+                        <input type="range" id="tool-width" min="1" max="50" value="${settings.width}">
+                        <span id="stroke-width-label">${settings.width}</span>
+                    </div>
+                `;
+                document.getElementById('tool-color').addEventListener('input', e => settings.color = e.target.value);
+                document.getElementById('tool-width').addEventListener('input', e => {
+                    settings.width = e.target.value;
+                    document.getElementById('stroke-width-label').textContent = e.target.value;
+                });
+            }
+        }
+        
+        // --- Pan and Zoom Handlers ---
+        viewerContainer.addEventListener('wheel', e => {
+            e.preventDefault();
+            const rect = pdfContainer.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            const zoomFactor = 1.1;
+            const oldScale = state.transform.scale;
+            const newScale = e.deltaY < 0 ? oldScale * zoomFactor : oldScale / zoomFactor;
+            
+            state.transform.scale = newScale;
+            state.transform.offsetX = mouseX - (mouseX - state.transform.offsetX) * (newScale / oldScale);
+            state.transform.offsetY = mouseY - (mouseY - state.transform.offsetY) * (newScale / oldScale);
+            
+            render(); // Rerender without reloading the page
+        });
+        
+        // --- Pointer Events for Pan, Draw, Erase ---
+        function getCanvasCoords(e) {
+            const rect = annotationCanvas.getBoundingClientRect();
+            return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        }
+        
+        viewerContainer.addEventListener('pointerdown', e => {
+            if (!pdfDoc) return;
+            if (e.pointerType === 'touch') e.preventDefault();
+            
+            // Pan start (middle mouse, or single touch)
+            if (e.button === 1 || state.activeTool === 'pan') {
+                state.isPanning = true;
+                state.panStart = { x: e.clientX - state.transform.offsetX, y: e.clientY - state.transform.offsetY };
+                return;
+            }
+
+            // Drawing / Erasing start
+            if (e.button === 0 && e.pointerType !== 'touch') { // Only allow pen/mouse for drawing
+                state.isDrawing = true;
+                const { x, y } = getCanvasCoords(e);
+                
+                if (state.activeTool === 'draw' || state.activeTool === 'highlight') {
+                    const settings = state.toolSettings[state.activeTool];
+                    state.currentPath = {
+                        type: state.activeTool,
+                        points: [{ x, y }],
+                        color: settings.color,
+                        width: settings.width
+                    };
+                    if (!annotations[pageNum]) annotations[pageNum] = [];
+                    annotations[pageNum].push(state.currentPath);
+                } else if (state.activeTool === 'eraser') {
+                    eraseAtPoint(x, y);
+                }
+            }
+        });
+
+        viewerContainer.addEventListener('pointermove', e => {
+            if (state.isPanning) {
+                state.transform.offsetX = e.clientX - state.panStart.x;
+                state.transform.offsetY = e.clientY - state.panStart.y;
+                render();
+                return;
+            }
+            if (!state.isDrawing) return;
+
+            const { x, y } = getCanvasCoords(e);
+            if (state.activeTool === 'draw' || state.activeTool === 'highlight') {
+                state.currentPath.points.push({ x, y });
+                redrawAnnotations();
+            } else if (state.activeTool === 'eraser') {
+                eraseAtPoint(x, y);
+            }
+        });
+
+        window.addEventListener('pointerup', e => {
+            state.isPanning = false;
+            state.isDrawing = false;
+            state.currentPath = null;
+        });
+        
+        function eraseAtPoint(x, y) {
+            let pageAnnotations = annotations[pageNum] || [];
+            let didErase = false;
+            const eraserWidth = state.toolSettings.eraser.width;
+            
+            for (let i = pageAnnotations.length - 1; i >= 0; i--) {
+                const anno = pageAnnotations[i];
+                const hit = anno.points.some(p => {
+                    const dist = Math.sqrt(Math.pow(p.x - x, 2) + Math.pow(p.y - y, 2));
+                    return dist < eraserWidth;
+                });
+                if (hit) {
+                    pageAnnotations.splice(i, 1);
+                    didErase = true;
+                }
+            }
+            if (didErase) redrawAnnotations();
+        }
+
+        // --- Download Logic ---
+        downloadBtn.addEventListener('click', async () => {
+            if (!pdfDoc || !originalPdfBytes) return;
+            loadingOverlay.style.display = 'flex';
+            
+            const { PDFDocument } = PDFLib;
+            const pdfDocToModify = await PDFDocument.load(originalPdfBytes);
+            
+            for (const pageNumKey in annotations) {
+                const pageIndex = parseInt(pageNumKey) - 1;
+                const page = pdfDocToModify.getPages()[pageIndex];
+                const pageAnnotations = annotations[pageNumKey];
+                const { width, height } = page.getSize();
+                
+                let svgPaths = pageAnnotations.map(anno => {
+                    const d = anno.points.map((p, i) => (i === 0 ? 'M' : 'L') + `${p.x.toFixed(2)} ${height - p.y.toFixed(2)}`).join(' ');
+                    const opacity = anno.type === 'highlight' ? '0.4' : '1.0';
+                    return `<path d="${d}" stroke="${anno.color}" stroke-width="${anno.width}" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${opacity}" />`;
+                }).join('');
+                
+                if(svgPaths.length > 0) {
+                    const svg = `<svg xmlns="http://www.w.org/2000/svg" width="${width}" height="${height}">${svgPaths}</svg>`;
+                    const svgObject = await pdfDocToModify.embedSvg(svg);
+                    page.drawSvg(svgObject, { x: 0, y: 0, width, height });
+                }
+            }
+
+            const pdfBytes = await pdfDocToModify.save();
+            const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'annotated.pdf';
+            link.click();
+            loadingOverlay.style.display = 'none';
+        });
+
+        // --- Initial Setup ---
+        document.querySelector('.tool-btn[data-tool="draw"]').click(); // Set pen as default tool
+        window.addEventListener('resize', fitToScreen);
+
+    </script>
+</body>
+</html>
