@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Local PDF Editor with Undo & File System</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Local PDF Editor - Fixed Coordinates</title>
     
     <style>
         /* General Setup */
@@ -15,11 +15,12 @@
             margin: 0; padding: 0; height: 100%; width: 100%;
             overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg-light); color: var(--text-light);
+            touch-action: none; /* Critical for tablet: prevents browser pinch/scroll */
         }
 
         /* App Layout */
         .app-container { display: flex; flex-direction: column; height: 100vh; }
-        .main-content { flex-grow: 1; display: flex; justify-content: center; align-items: center; overflow: hidden; position: relative; }
+        .main-content { flex-grow: 1; display: flex; justify-content: center; align-items: center; overflow: hidden; position: relative; background: var(--bg-light); }
 
         /* Toolbar */
         .toolbar {
@@ -46,14 +47,28 @@
         #stroke-width-label { min-width: 20px; text-align: center; }
 
         /* PDF Viewer & Centering */
-        #pdf-wrapper { position: relative; }
-        #pdf-viewer-container {
-            position: relative; box-shadow: 0 0 20px rgba(0,0,0,0.5);
-            touch-action: none;
+        #pdf-wrapper { 
+            position: relative; 
+            width: 100%; 
+            height: 100%; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            overflow: hidden; 
         }
+
+        #pdf-viewer-container {
+            position: absolute; 
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            touch-action: none;
+            /* CRITICAL FIX 1: Transform origin must be top-left for the math to work */
+            transform-origin: 0 0; 
+            will-change: transform;
+        }
+
         #pdf-viewer-container[data-tool="pan"] { cursor: grab; }
         #pdf-viewer-container[data-tool="pan"].panning { cursor: grabbing; }
-        #pdf-canvas, #annotation-canvas { position: absolute; top: 0; left: 0; }
+        #pdf-canvas, #annotation-canvas { position: absolute; top: 0; left: 0; pointer-events: none; }
         
         /* On-Screen Page Navigation */
         .page-nav {
@@ -88,7 +103,10 @@
         #file-list .file-actions button:hover { background-color: var(--accent); }
         .modal-close { float: right; cursor: pointer; font-size: 24px; }
 
-        #loading-overlay { z-index: 9999; }
+        #loading-overlay { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 9999; 
+        }
         .spinner { width: 50px; height: 50px; border: 5px solid var(--bg-light); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
     </style>
@@ -164,7 +182,7 @@
     // --- STATE MANAGEMENT ---
     let pdfDoc = null, originalPdfBytes = null, pageNum = 1, currentFileId = null;
     let annotations = {};
-    let history = {}, redoStack = {}; // For undo/redo
+    let history = {}, redoStack = {};
     
     const state = {
         transform: { scale: 1, offsetX: 0, offsetY: 0 },
@@ -195,13 +213,25 @@
     function render() {
         if (!pdfDoc) return;
         loadingOverlay.style.display = 'flex';
+        
         pdfDoc.getPage(pageNum).then(page => {
-            const pdfViewport = page.getViewport({ scale: 1 });
+            // CRITICAL FIX 3: Higher scale for cleaner text on Xiaomi Tablet
+            const scaleFactor = 1.5; 
+            const pdfViewport = page.getViewport({ scale: scaleFactor });
+            
+            // Set CSS dimensions
             pdfContainer.style.width = `${pdfViewport.width}px`;
             pdfContainer.style.height = `${pdfViewport.height}px`;
-            pdfCanvas.width = pdfViewport.width; pdfCanvas.height = pdfViewport.height;
-            annotationCanvas.width = pdfViewport.width; annotationCanvas.height = pdfViewport.height;
+            
+            // Set Canvas Dimensions (Resolution)
+            pdfCanvas.width = pdfViewport.width; 
+            pdfCanvas.height = pdfViewport.height;
+            annotationCanvas.width = pdfViewport.width; 
+            annotationCanvas.height = pdfViewport.height;
+
+            // Apply Transform
             pdfContainer.style.transform = `translate(${state.transform.offsetX}px, ${state.transform.offsetY}px) scale(${state.transform.scale})`;
+            
             page.render({ canvasContext: pdfCtx, viewport: pdfViewport }).promise.then(() => {
                 redrawAnnotations();
                 loadingOverlay.style.display = 'none';
@@ -217,6 +247,7 @@
             annotationCtx.beginPath();
             annotationCtx.moveTo(anno.points[0].x, anno.points[0].y);
             anno.points.forEach(p => annotationCtx.lineTo(p.x, p.y));
+            
             if (anno.type === 'highlight') annotationCtx.globalAlpha = 0.4;
             annotationCtx.strokeStyle = anno.color;
             annotationCtx.lineWidth = anno.width;
@@ -229,10 +260,26 @@
     
     function fitToScreen() {
         if (!pdfDoc) return;
+        // Reset scale but keep offset to 0
         pdfDoc.getPage(pageNum).then(page => {
-            const viewport = page.getViewport({ scale: 1 });
-            const scale = Math.min((viewerContainer.clientWidth / viewport.width) * 0.95, (viewerContainer.clientHeight / viewport.height) * 0.95);
-            state.transform = { scale, offsetX: 0, offsetY: 0 };
+            // Match the scale used in render()
+            const viewport = page.getViewport({ scale: 1.5 });
+            
+            // Calculate scale to fit container
+            const containerW = viewerContainer.clientWidth;
+            const containerH = viewerContainer.clientHeight;
+            
+            // Scale based on the Canvas size vs Container size
+            const scale = Math.min(
+                (containerW / viewport.width) * 0.95, 
+                (containerH / viewport.height) * 0.95
+            );
+            
+            // Center the PDF in the viewport
+            const offsetX = (containerW - (viewport.width * scale)) / 2;
+            const offsetY = (containerH - (viewport.height * scale)) / 2;
+
+            state.transform = { scale, offsetX, offsetY };
             render();
         });
     }
@@ -240,24 +287,21 @@
     // --- UNDO/REDO LOGIC ---
     function recordHistory() {
         if (!history[pageNum]) history[pageNum] = [];
-        // Deep copy of current annotations for the page
         history[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum] || [])));
-        // A new action clears the redo stack
         redoStack[pageNum] = [];
         updateUndoRedoButtons();
     }
     
     function undo() {
-        if (!history[pageNum] || history[pageNum].length <= 1) return; // Need at least one state to revert to
+        if (!history[pageNum] || history[pageNum].length === 0) return;
         if (!redoStack[pageNum]) redoStack[pageNum] = [];
         
-        // Move current state to redo stack
-        const currentState = history[pageNum].pop();
-        redoStack[pageNum].push(currentState);
+        // Push current state to redo
+        redoStack[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum] || [])));
         
-        // Revert to previous state
-        const prevState = history[pageNum][history[pageNum].length - 1];
-        annotations[pageNum] = JSON.parse(JSON.stringify(prevState));
+        // Pop previous state
+        const prevState = history[pageNum].pop();
+        annotations[pageNum] = prevState;
         
         redrawAnnotations();
         updateUndoRedoButtons();
@@ -266,29 +310,32 @@
     function redo() {
         if (!redoStack[pageNum] || redoStack[pageNum].length === 0) return;
         
+        // Push current to history
+        recordHistoryWithoutClearingRedo(); 
+        
         const nextState = redoStack[pageNum].pop();
-        history[pageNum].push(nextState);
-        annotations[pageNum] = JSON.parse(JSON.stringify(nextState));
+        annotations[pageNum] = nextState;
         
         redrawAnnotations();
         updateUndoRedoButtons();
     }
+    
+    function recordHistoryWithoutClearingRedo() {
+        if (!history[pageNum]) history[pageNum] = [];
+        history[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum] || [])));
+    }
 
     function updateUndoRedoButtons() {
-        undoBtn.disabled = !history[pageNum] || history[pageNum].length <= 1;
+        undoBtn.disabled = !history[pageNum] || history[pageNum].length === 0;
         redoBtn.disabled = !redoStack[pageNum] || redoStack[pageNum].length === 0;
     }
 
-    // --- FILE MANAGEMENT & UI ---
+    // --- FILE MANAGEMENT ---
     async function loadFile(id, fileData, annotationData) {
         currentFileId = id;
         originalPdfBytes = fileData;
         annotations = annotationData || {};
-        history = {}; redoStack = {}; // Reset history
-        Object.keys(annotations).forEach(pn => {
-            history[pn] = [JSON.parse(JSON.stringify(annotations[pn] || []))];
-        });
-
+        history = {}; redoStack = {};
         pdfDoc = await pdfjsLib.getDocument(new Uint8Array(originalPdfBytes)).promise;
         pageNum = 1;
         fitToScreen();
@@ -301,8 +348,6 @@
         const file = e.target.files[0]; if (!file) return;
         const tempName = file.name;
         const buffer = await file.arrayBuffer();
-        
-        // Treat as a new unsaved file
         currentFileId = null; 
         document.title = `${tempName}* - PDF Editor`;
         await loadFile(null, buffer, {});
@@ -311,9 +356,8 @@
     saveBtn.addEventListener('click', async () => {
         if (!pdfDoc) return;
         loadingOverlay.style.display = 'flex';
-        
         let fileId = currentFileId;
-        if (!fileId) { // First time saving a new file
+        if (!fileId) {
             const fileName = prompt("Enter a name for this file:", document.title.replace('* - PDF Editor', ''));
             if (!fileName) { loadingOverlay.style.display = 'none'; return; }
             fileId = Date.now();
@@ -324,13 +368,10 @@
             currentFileId = fileId;
             document.title = `${fileName} - PDF Editor`;
         }
-        
-        // Save annotations
         const annotationData = { fileId, data: annotations };
         const txAnno = db.transaction('annotations', 'readwrite');
         await txAnno.objectStore('annotations').put(annotationData);
         await txAnno.done;
-        
         loadingOverlay.style.display = 'none';
         alert("File saved locally!");
     });
@@ -344,12 +385,7 @@
         } else {
             allFiles.forEach(file => {
                 const li = document.createElement('li');
-                li.innerHTML = `
-                    <span>${file.name}</span>
-                    <div class="file-actions">
-                        <button data-id="${file.id}" class="open-file">Open</button>
-                        <button data-id="${file.id}" class="delete-file">Delete</button>
-                    </div>`;
+                li.innerHTML = `<span>${file.name}</span><div class="file-actions"><button data-id="${file.id}" class="open-file">Open</button><button data-id="${file.id}" class="delete-file">Delete</button></div>`;
                 fileList.appendChild(li);
             });
         }
@@ -370,17 +406,17 @@
             filesModal.style.display = 'none';
         }
         if (e.target.classList.contains('delete-file')) {
-            if (confirm("Are you sure you want to delete this file? This cannot be undone.")) {
+            if (confirm("Are you sure?")) {
                 await db.delete('files', id);
                 await db.delete('annotations', id);
-                filesBtn.click(); // Refresh list
+                filesBtn.click();
             }
         }
     });
 
     getEl('files-modal-close').addEventListener('click', () => filesModal.style.display = 'none');
     
-    // --- EVENT LISTENERS (Pan, Zoom, Draw, etc.) ---
+    // --- EVENT LISTENERS & TOOLS ---
     document.getElementById('reset-view-btn').addEventListener('click', fitToScreen);
     document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => btn.addEventListener('click', () => setActiveTool(btn.dataset.tool)));
     prevPageOverlay.addEventListener('click', () => { if (pageNum > 1) { pageNum--; render(); }});
@@ -396,50 +432,6 @@
         updateToolPropertiesUI();
     }
     
-    function updateToolPropertiesUI() { /* ... unchanged ... */ }
-    viewerContainer.addEventListener('wheel', e => { /* ... unchanged ... */ });
-    function getCanvasCoords(e) { /* ... unchanged ... */ }
-    
-    viewerContainer.addEventListener('pointerdown', e => {
-        if (!pdfDoc) return;
-        pointerCache.set(e.pointerId, { x: e.clientX, y: e.clientY, lastX: e.clientX, lastY: e.clientY });
-        
-        // Record history at the beginning of a drawing/erasing action
-        if (e.button === 0 && ((state.activeTool === 'draw' || state.activeTool === 'highlight') && e.pointerType === 'pen') || (state.activeTool === 'eraser' && e.pointerType !== 'touch')) {
-            recordHistory();
-        }
-
-        if ((state.activeTool === 'draw' || state.activeTool === 'highlight') && e.pointerType === 'pen') {
-            state.isDrawing = true;
-            const { x, y } = getCanvasCoords(e);
-            const settings = state.toolSettings[state.activeTool];
-            state.currentPath = { type: state.activeTool, points: [{ x, y }], color: settings.color, width: settings.width };
-            if (!annotations[pageNum]) annotations[pageNum] = [];
-            annotations[pageNum].push(state.currentPath);
-        } else if (state.activeTool === 'eraser' && e.pointerType !== 'touch') {
-            state.isDrawing = true;
-            eraseAtPoint(getCanvasCoords(e));
-        }
-    });
-    
-    viewerContainer.addEventListener('pointermove', e => { /* ... unchanged ... */ });
-    function handlePointerUp(e) { /* ... unchanged ... */ }
-    viewerContainer.addEventListener('pointerup', handlePointerUp);
-    viewerContainer.addEventListener('pointercancel', handlePointerUp);
-    
-    function eraseAtPoint({ x, y }) { /* ... unchanged ... */ }
-    window.addEventListener('keydown', e => { /* ... unchanged, but with undo/redo ... */ });
-    downloadBtn.addEventListener('click', async () => { /* ... unchanged ... */ });
-
-    // --- INITIALIZATION ---
-    async function init() {
-        await openDB();
-        setActiveTool('pan');
-        window.addEventListener('resize', fitToScreen);
-    }
-    init();
-    
-    // --- Unchanged Functions (for brevity in this view, but needed in the file) ---
     function updateToolPropertiesUI() {
         toolPropertiesContainer.innerHTML = ''; const tool = state.activeTool;
         if (tool === 'draw' || tool === 'highlight') {
@@ -449,75 +441,223 @@
             getEl('tool-width').oninput = e => { settings.width = e.target.value; getEl('stroke-width-label').textContent = e.target.value; };
         }
     }
+
+    function goToPrevPage() { if (pageNum > 1) { pageNum--; render(); } }
+    function goToNextPage() { if (pageNum < pdfDoc.numPages) { pageNum++; render(); } }
+
+    // --- COORDINATE & ZOOM LOGIC ---
+    
+    // CRITICAL FIX 2: Correct Coordinate Mapping for Scale
+    // This calculates the ratio between the visual screen pixels and the internal canvas pixels
+    function getCanvasCoords(e) {
+        const rect = annotationCanvas.getBoundingClientRect();
+        
+        // Visual coordinates relative to the canvas element on screen
+        const visualX = e.clientX - rect.left;
+        const visualY = e.clientY - rect.top;
+
+        // Scaling factor (Internal Pixels / Visual Pixels)
+        const scaleX = annotationCanvas.width / rect.width;
+        const scaleY = annotationCanvas.height / rect.height;
+
+        return { 
+            x: visualX * scaleX, 
+            y: visualY * scaleY 
+        };
+    }
+
     viewerContainer.addEventListener('wheel', e => {
-        e.preventDefault(); const rect = pdfContainer.getBoundingClientRect(); const { scale } = state.transform; const newScale = e.deltaY < 0 ? scale * 1.1 : scale / 1.1;
-        state.transform.offsetX = e.clientX - rect.left - (e.clientX - rect.left - state.transform.offsetX) * (newScale / scale);
-        state.transform.offsetY = e.clientY - rect.top - (e.clientY - rect.top - state.transform.offsetY) * (newScale / scale);
-        state.transform.scale = newScale; render();
+        e.preventDefault(); 
+        const rect = pdfContainer.getBoundingClientRect(); 
+        const { scale } = state.transform; 
+        const newScale = e.deltaY < 0 ? scale * 1.1 : scale / 1.1;
+        
+        // Zoom towards mouse position
+        // Because transform-origin is 0 0, we must adjust offsetX/Y manually
+        const mouseX = e.clientX - rect.left; // Mouse Pos inside element
+        const mouseY = e.clientY - rect.top;
+
+        // Formula changes slightly because we are panning the container's TopLeft relative to Wrapper
+        // We need the mouse position relative to the Wrapper
+        const wrapperRect = viewerContainer.getBoundingClientRect();
+        const mouseInWrapperX = e.clientX - wrapperRect.left;
+        const mouseInWrapperY = e.clientY - wrapperRect.top;
+
+        // Calculate new offsets to keep mouse point stable
+        state.transform.offsetX = mouseInWrapperX - (mouseInWrapperX - state.transform.offsetX) * (newScale / scale);
+        state.transform.offsetY = mouseInWrapperY - (mouseInWrapperY - state.transform.offsetY) * (newScale / scale);
+        
+        state.transform.scale = newScale; 
+        render();
+    }, { passive: false });
+
+    viewerContainer.addEventListener('pointerdown', e => {
+        if (!pdfDoc) return;
+        pointerCache.set(e.pointerId, { x: e.clientX, y: e.clientY, lastX: e.clientX, lastY: e.clientY });
+        
+        const isPen = e.pointerType === 'pen';
+        const isEraser = state.activeTool === 'eraser';
+
+        // History recording
+        if (e.button === 0 && ((state.activeTool === 'draw' || state.activeTool === 'highlight') && isPen) || (isEraser && !isPen && e.pointerType !== 'touch')) {
+            recordHistory();
+        }
+
+        if ((state.activeTool === 'draw' || state.activeTool === 'highlight') && isPen) {
+            state.isDrawing = true;
+            const { x, y } = getCanvasCoords(e);
+            const settings = state.toolSettings[state.activeTool];
+            state.currentPath = { type: state.activeTool, points: [{ x, y }], color: settings.color, width: settings.width };
+            if (!annotations[pageNum]) annotations[pageNum] = [];
+            annotations[pageNum].push(state.currentPath);
+        } else if (isEraser && e.pointerType !== 'touch') {
+            state.isDrawing = true;
+            eraseAtPoint(getCanvasCoords(e));
+        }
     });
-    function getCanvasCoords(e) { const rect = annotationCanvas.getBoundingClientRect(); return { x: e.clientX - rect.left, y: e.clientY - rect.top }; }
+    
     viewerContainer.addEventListener('pointermove', e => {
-        if (!pointerCache.has(e.pointerId)) return; const currentPointer = pointerCache.get(e.pointerId);
+        if (!pointerCache.has(e.pointerId)) return; 
+        const currentPointer = pointerCache.get(e.pointerId);
+        
         if (state.isDrawing) {
             const { x, y } = getCanvasCoords(e);
-            if (state.activeTool === 'draw' || state.activeTool === 'highlight') { state.currentPath.points.push({ x, y }); redrawAnnotations(); }
-            else if (state.activeTool === 'eraser') { eraseAtPoint({ x, y }); }
+            if (state.activeTool === 'draw' || state.activeTool === 'highlight') { 
+                state.currentPath.points.push({ x, y }); 
+                redrawAnnotations(); 
+            } else if (state.activeTool === 'eraser') { 
+                eraseAtPoint({ x, y }); 
+            }
         } else if (pointerCache.size === 1 && state.activeTool === 'pan') {
-            pdfContainer.classList.add('panning'); const dx = e.clientX - currentPointer.lastX; const dy = e.clientY - currentPointer.lastY;
-            state.transform.offsetX += dx; state.transform.offsetY += dy; render();
+            pdfContainer.classList.add('panning'); 
+            const dx = e.clientX - currentPointer.lastX; 
+            const dy = e.clientY - currentPointer.lastY;
+            state.transform.offsetX += dx; 
+            state.transform.offsetY += dy; 
+            render();
         } else if (pointerCache.size === 2) {
-            const pointers = Array.from(pointerCache.values()); const dist = Math.hypot(pointers[0].x - pointers[1].x, pointers[0].y - pointers[1].y);
-            const midX = (pointers[0].x + pointers[1].x) / 2, midY = (pointers[0].y + pointers[1].y) / 2;
+            // Pinch to Zoom
+            const pointers = Array.from(pointerCache.values()); 
+            const dist = Math.hypot(pointers[0].x - pointers[1].x, pointers[0].y - pointers[1].y);
+            const midX = (pointers[0].x + pointers[1].x) / 2;
+            const midY = (pointers[0].y + pointers[1].y) / 2;
+            
             if (prevPinchDist) {
-                const oldScale = state.transform.scale; const newScale = oldScale * (dist / prevPinchDist);
-                state.transform.offsetX = midX - (midX - state.transform.offsetX) * (newScale / oldScale);
-                state.transform.offsetY = midY - (midY - state.transform.offsetY) * (newScale / oldScale);
-                state.transform.scale = newScale; render();
+                const oldScale = state.transform.scale; 
+                const newScale = oldScale * (dist / prevPinchDist);
+                
+                // Adjust offsets to zoom into center of pinch
+                const wrapperRect = viewerContainer.getBoundingClientRect();
+                const midInWrapperX = midX - wrapperRect.left;
+                const midInWrapperY = midY - wrapperRect.top;
+
+                state.transform.offsetX = midInWrapperX - (midInWrapperX - state.transform.offsetX) * (newScale / oldScale);
+                state.transform.offsetY = midInWrapperY - (midInWrapperY - state.transform.offsetY) * (newScale / oldScale);
+                
+                state.transform.scale = newScale; 
+                render();
             }
             prevPinchDist = dist;
         }
-        currentPointer.lastX = e.clientX; currentPointer.lastY = e.clientY;
+        currentPointer.lastX = e.clientX; 
+        currentPointer.lastY = e.clientY;
+        pointerCache.set(e.pointerId, currentPointer);
     });
+
     function handlePointerUp(e) {
-        pointerCache.delete(e.pointerId); if (pointerCache.size < 2) prevPinchDist = null; if (pointerCache.size < 1) pdfContainer.classList.remove('panning');
-        state.isDrawing = false; state.currentPath = null; updateUndoRedoButtons();
+        pointerCache.delete(e.pointerId); 
+        if (pointerCache.size < 2) prevPinchDist = null; 
+        if (pointerCache.size < 1) pdfContainer.classList.remove('panning');
+        state.isDrawing = false; 
+        state.currentPath = null; 
+        updateUndoRedoButtons();
     }
+    
+    viewerContainer.addEventListener('pointerup', handlePointerUp);
+    viewerContainer.addEventListener('pointercancel', handlePointerUp);
+    
     function eraseAtPoint({ x, y }) {
         let pageAnnotations = annotations[pageNum] || []; let didErase = false;
+        // Search backwards to erase top-most items first
         for (let i = pageAnnotations.length - 1; i >= 0; i--) {
             const hit = pageAnnotations[i].points.some(p => Math.sqrt(Math.pow(p.x - x, 2) + Math.pow(p.y - y, 2)) < state.toolSettings.eraser.width);
             if (hit) { pageAnnotations.splice(i, 1); didErase = true; }
         }
         if (didErase) redrawAnnotations();
     }
+
     window.addEventListener('keydown', e => {
         if(document.activeElement.tagName === 'INPUT') return;
         if(e.ctrlKey || e.metaKey){ if(e.key.toLowerCase() === 'z') undo(); if(e.key.toLowerCase() === 'y') redo(); return; }
         const key = e.key.toLowerCase();
-        if(key === 'arrowleft') goToPrevPage(); if(key === 'arrowright') goToNextPage();
-        if(key === 'f') fitToScreen(); if(key === 'm') setActiveTool('pan'); if(key === 'p') setActiveTool('draw');
-        if(key === 'h') setActiveTool('highlight'); if(key === 'e') setActiveTool('eraser');
+        if(key === 'arrowleft') goToPrevPage(); 
+        if(key === 'arrowright') goToNextPage();
+        if(key === 'f') fitToScreen(); 
+        if(key === 'm') setActiveTool('pan'); 
+        if(key === 'p') setActiveTool('draw');
+        if(key === 'h') setActiveTool('highlight'); 
+        if(key === 'e') setActiveTool('eraser');
     });
+
     downloadBtn.addEventListener('click', async () => {
-        if (!pdfDoc || !originalPdfBytes) return; loadingOverlay.style.display = 'flex';
-        const { PDFDocument } = PDFLib; const pdfDocToModify = await PDFDocument.load(originalPdfBytes);
+        if (!pdfDoc || !originalPdfBytes) return; 
+        loadingOverlay.style.display = 'flex';
+        const { PDFDocument } = PDFLib; 
+        const pdfDocToModify = await PDFDocument.load(originalPdfBytes);
+        
         for (const pageNumKey in annotations) {
-            const pageIndex = parseInt(pageNumKey) - 1; if (pageIndex >= pdfDocToModify.getPageCount()) continue;
-            const page = pdfDocToModify.getPages()[pageIndex]; const { width, height } = page.getSize();
+            const pageIndex = parseInt(pageNumKey) - 1; 
+            if (pageIndex >= pdfDocToModify.getPageCount()) continue;
+            
+            const page = pdfDocToModify.getPages()[pageIndex]; 
+            const { width, height } = page.getSize();
+            
+            // NOTE: PDF-Lib uses bottom-left (0,0), Canvas uses top-left (0,0)
+            // We must flip Y. Since we render at 1.5x scale in UI, we must also scale down coords.
+            // However, the annotation coordinates stored are based on the Canvas Size.
+            // The Canvas Size was set to Viewport size (1.5x original PDF size).
+            // So we need to scale coordinates DOWN by 1.5 to match PDF points.
+            
+            // We access the scale used during rendering (hardcoded to 1.5 in render())
+            const renderScale = 1.5;
+
             let svgPaths = (annotations[pageNumKey] || []).map(anno => {
-                const d = anno.points.map((p, i) => (i === 0 ? 'M' : 'L') + `${p.x.toFixed(2)} ${height - p.y.toFixed(2)}`).join(' ');
+                const d = anno.points.map((p, i) => {
+                    // Convert Canvas Coord to PDF Coord
+                    const pdfX = p.x / renderScale;
+                    const pdfY = height - (p.y / renderScale); 
+                    return (i === 0 ? 'M' : 'L') + `${pdfX.toFixed(2)} ${pdfY.toFixed(2)}`;
+                }).join(' ');
+                
                 const opacity = anno.type === 'highlight' ? '0.4' : '1.0';
-                return `<path d="${d}" stroke="${anno.color}" stroke-width="${anno.width}" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${opacity}" />`;
+                // Stroke width also needs scaling down
+                const strokeWidth = anno.width / renderScale;
+
+                return `<path d="${d}" stroke="${anno.color}" stroke-width="${strokeWidth}" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${opacity}" />`;
             }).join('');
+            
             if(svgPaths) {
                 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">${svgPaths}</svg>`;
                 page.drawSvg(await pdfDocToModify.embedSvg(svg), { x: 0, y: 0, width, height });
             }
         }
-        const pdfBytes = await pdfDocToModify.save(); const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-        const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'annotated_copy.pdf';
-        link.click(); loadingOverlay.style.display = 'none';
+        
+        const pdfBytes = await pdfDocToModify.save(); 
+        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+        const link = document.createElement('a'); 
+        link.href = URL.createObjectURL(blob); 
+        link.download = 'annotated_copy.pdf';
+        link.click(); 
+        loadingOverlay.style.display = 'none';
     });
+
+    // --- INITIALIZATION ---
+    async function init() {
+        await openDB();
+        setActiveTool('pan');
+        window.addEventListener('resize', fitToScreen);
+    }
+    init();
     </script>
 </body>
 </html>
