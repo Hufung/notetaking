@@ -1,4 +1,3 @@
-<!-- START OF FILE index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -11,13 +10,12 @@
         :root {
             --bg-dark: #202225; --bg-medium: #2f3136; --bg-light: #36393f;
             --text-light: #ffffff; --text-muted: #a0a0a0; --accent: #5865f2;
-            --dock-height: 160px;
         }
         html, body {
             margin: 0; padding: 0; height: 100%; width: 100%;
             overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg-light); color: var(--text-light);
-            touch-action: none; /* PREVENTS BROWSER SCROLL/ZOOM */
+            touch-action: none; 
         }
 
         .app-container { display: flex; flex-direction: column; height: 100vh; position: relative; }
@@ -34,13 +32,11 @@
         .tool-btn {
             background: var(--bg-medium); border: 1px solid transparent; border-radius: 6px; padding: 8px 12px; 
             cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
-            color: var(--text-light); font-size: 14px; transition: all 0.2s;
+            color: var(--text-light); font-size: 14px; transition: all 0.2s; text-decoration: none;
         }
         .tool-btn svg { width: 18px; height: 18px; stroke-width: 2; stroke: currentColor; }
         .tool-btn:hover { background-color: #40444b; }
         .tool-btn.active { background-color: var(--accent); border-color: var(--accent); color: white; }
-        .tool-btn.file-tab-btn { background-color: #202225; border: 1px solid #444; }
-        .tool-btn.file-tab-btn.active { background-color: var(--bg-medium); border-color: var(--text-muted); }
         
         #tool-properties { display: flex; align-items: center; gap: 10px; padding-left: 10px; border-left: 1px solid #444; }
         input[type="color"] { border: none; width: 24px; height: 24px; padding: 0; background: none; cursor: pointer; }
@@ -83,58 +79,6 @@
         #next-page-overlay { right: 10px; }
         .page-nav.disabled { display: none; }
 
-        /* --- THE DOCKER (FILE BROWSER) --- */
-        .dock-wrapper {
-            position: absolute; bottom: 0; left: 0; width: 100%;
-            height: var(--dock-height);
-            background-color: rgba(32, 34, 37, 0.95);
-            backdrop-filter: blur(10px);
-            border-top: 1px solid var(--accent);
-            transform: translateY(100%); /* Hidden by default */
-            transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1);
-            z-index: 3000;
-            display: flex; flex-direction: column;
-        }
-        .dock-wrapper.open { transform: translateY(0); }
-
-        .dock-header {
-            padding: 8px 16px; display: flex; justify-content: space-between; align-items: center;
-            background: rgba(0,0,0,0.2); font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;
-        }
-        .close-dock-btn { background: none; border: none; color: var(--text-light); cursor: pointer; font-size: 18px; }
-
-        .dock-content {
-            flex-grow: 1; overflow-x: auto; overflow-y: hidden;
-            display: flex; align-items: center; gap: 20px; padding: 0 20px;
-        }
-        .dock-content::-webkit-scrollbar { height: 6px; }
-        .dock-content::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
-
-        .file-card {
-            display: flex; flex-direction: column; align-items: center; gap: 8px;
-            width: 100px; cursor: pointer; position: relative; flex-shrink: 0;
-            transition: transform 0.2s;
-        }
-        .file-card:hover { transform: translateY(-5px); }
-        .file-thumb {
-            width: 90px; height: 100px; object-fit: contain; background: #fff;
-            border-radius: 6px; border: 2px solid #444;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            transition: border-color 0.2s;
-        }
-        .file-card.active .file-thumb { border-color: var(--accent); box-shadow: 0 0 15px rgba(88, 101, 242, 0.4); }
-        .file-name { font-size: 11px; text-align: center; color: var(--text-muted); width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        
-        .delete-btn {
-            position: absolute; top: -5px; right: 0; width: 20px; height: 20px;
-            background: #ed4245; color: white; border-radius: 50%;
-            display: none; align-items: center; justify-content: center;
-            font-size: 14px; font-weight: bold;
-        }
-        .file-card:hover .delete-btn { display: flex; }
-        
-        .dock-empty { width: 100%; text-align: center; color: var(--text-muted); }
-
         /* Loading */
         #loading-overlay { 
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
@@ -150,14 +94,15 @@
         <!-- TOOLBAR -->
         <div class="toolbar">
             <div class="toolbar-section">
-                <!-- NEW FILE TAB BUTTON -->
-                <button class="tool-btn file-tab-btn" id="files-toggle-btn" title="Open File Dock">
+                <!-- LINK TO FILES PAGE -->
+                <a href="files.html" class="tool-btn" title="Go to File Library">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
                     Files
-                </button>
+                </a>
+                
                 <input type="file" id="pdf-upload" accept="application/pdf" style="display: none;">
                 <button class="tool-btn" id="upload-btn" title="New PDF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> New</button>
-                <button class="tool-btn" id="save-btn" disabled title="Save to Dock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg> Save</button>
+                <button class="tool-btn" id="save-btn" disabled title="Save to Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg> Save</button>
                 <button class="tool-btn" id="download-btn" disabled title="Export File"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></button>
             </div>
 
@@ -170,22 +115,13 @@
             <div class="toolbar-section">
                 <button class="tool-btn" data-tool="pan" title="Pan / Click Links"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg></button>
                 <button class="tool-btn" data-tool="draw" title="Pen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg></button>
-                
-                <!-- NEW STRAIGHT LINE TOOL -->
                 <button class="tool-btn" data-tool="line" title="Straight Line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="4" y1="20" x2="20" y2="4"></line></svg></button>
-                
                 <button class="tool-btn" data-tool="highlight" title="Marker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg></button>
-                
-                <!-- NEW LINK TOOL -->
                 <button class="tool-btn" data-tool="link" title="Insert Link URL"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></button>
-
                 <button class="tool-btn" data-tool="eraser" title="Eraser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
                 
                 <div id="tool-properties"></div>
-                
                 <button class="tool-btn" id="reset-view-btn" title="Fit View"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 3h6v6"></path><path d="M9 21H3v-6"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path></svg></button>
-                
-                <!-- NEW ZOOM INDICATOR -->
                 <span id="zoom-indicator" class="zoom-indicator">100%</span>
             </div>
         </div>
@@ -198,17 +134,6 @@
             </div>
             <div id="prev-page-overlay" class="page-nav disabled">‹</div>
             <div id="next-page-overlay" class="page-nav disabled">›</div>
-        </div>
-
-        <!-- DOCKER (FILE BROWSER) -->
-        <div class="dock-wrapper" id="dock-wrapper">
-            <div class="dock-header">
-                <span>Local Library</span>
-                <button class="close-dock-btn" id="close-dock">&times;</button>
-            </div>
-            <div class="dock-content" id="dock-content">
-                <div class="dock-empty">Loading local files...</div>
-            </div>
         </div>
     </div>
     
@@ -227,11 +152,9 @@
     const pdfCanvas = getEl('pdf-canvas'), annotationCanvas = getEl('annotation-canvas');
     const pdfCtx = pdfCanvas.getContext('2d'), annotationCtx = annotationCanvas.getContext('2d');
     const pdfContainer = getEl('pdf-viewer-container');
-    const dockWrapper = getEl('dock-wrapper'), dockContent = getEl('dock-content');
     const zoomIndicator = getEl('zoom-indicator');
     
     // Buttons
-    const filesToggleBtn = getEl('files-toggle-btn'), closeDockBtn = getEl('close-dock');
     const uploadBtn = getEl('upload-btn'), uploadInput = getEl('pdf-upload');
     const saveBtn = getEl('save-btn'), downloadBtn = getEl('download-btn');
     const undoBtn = getEl('undo-btn'), redoBtn = getEl('redo-btn');
@@ -245,16 +168,8 @@
     
     const state = {
         transform: { scale: 1, offsetX: 0, offsetY: 0 },
-        isDrawing: false, 
-        currentPath: null,
-        activeTool: 'pan',
-        toolSettings: { 
-            draw: { color: '#ff0000', width: 3 }, 
-            line: { color: '#ff0000', width: 3 }, // New Line settings
-            highlight: { color: '#ffff00', width: 20 }, 
-            eraser: { width: 20 },
-            link: { color: '#5865f2' } // New Link settings
-        }
+        isDrawing: false, currentPath: null, activeTool: 'pan',
+        toolSettings: { draw: { color: '#ff0000', width: 3 }, line: { color: '#ff0000', width: 3 }, highlight: { color: '#ffff00', width: 20 }, eraser: { width: 20 }, link: { color: '#5865f2' } }
     };
     const pointerCache = new Map();
     let prevPinchDist = null;
@@ -273,87 +188,40 @@
         });
     }
 
-    // --- DOCK LOGIC ---
-    function toggleDock() {
-        dockWrapper.classList.toggle('open');
-        filesToggleBtn.classList.toggle('active');
-        if (dockWrapper.classList.contains('open')) refreshDock();
-    }
-    
-    filesToggleBtn.onclick = toggleDock;
-    closeDockBtn.onclick = toggleDock;
-
-    async function refreshDock() {
-        if (!isDbReady) { dockContent.innerHTML = '<div class="dock-empty">Storage unavailable</div>'; return; }
-        const tx = db.transaction('files', 'readonly');
-        const files = await tx.objectStore('files').getAll();
+    // --- LOAD FROM DB ---
+    async function checkURLForFile() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const fileId = urlParams.get('id');
         
-        dockContent.innerHTML = '';
-        if (files.length === 0) {
-            dockContent.innerHTML = '<div class="dock-empty">No saved files yet.<br>Click "Save" to add current file.</div>';
-            return;
-        }
-
-        files.forEach(file => {
-            const card = document.createElement('div');
-            card.className = `file-card ${file.id === currentFileId ? 'active' : ''}`;
-            
-            // Thumbnail handling
-            const thumbSrc = file.thumbnail || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2NjYyIgZD0iTTE0IDJINmEyIDIgMCAwIDAtMiAydjE2YTIgMiAwIDAgMCAyIDJoMTJhMiAyIDAgMCAwIDItMlY4bC02LTZ6Ii8+PC9zdmc+';
-            
-            card.innerHTML = `
-                <div class="delete-btn" title="Delete">×</div>
-                <img src="${thumbSrc}" class="file-thumb">
-                <div class="file-name">${file.name}</div>
-            `;
-            
-            card.onclick = async (e) => {
-                if (e.target.classList.contains('delete-btn')) {
-                    e.stopPropagation();
-                    if (confirm(`Delete "${file.name}"?`)) {
-                        const txDel = db.transaction(['files', 'annotations'], 'readwrite');
-                        txDel.objectStore('files').delete(file.id);
-                        txDel.objectStore('annotations').delete(file.id);
-                        await txDel.done;
-                        if (currentFileId === file.id) window.location.reload();
-                        else refreshDock();
-                    }
-                } else if (file.id !== currentFileId) {
-                    // Load File
-                    getEl('loading-overlay').style.display = 'flex';
-                    const txLoad = db.transaction(['files', 'annotations'], 'readonly');
-                    const f = await txLoad.objectStore('files').get(file.id);
-                    const a = await txLoad.objectStore('annotations').get(file.id);
+        if (fileId && isDbReady) {
+            getEl('loading-overlay').style.display = 'flex';
+            try {
+                const tx = db.transaction(['files', 'annotations'], 'readonly');
+                const f = await tx.objectStore('files').get(parseInt(fileId));
+                const a = await tx.objectStore('annotations').get(parseInt(fileId));
+                
+                if (f) {
                     await loadFile(f.id, f.data, a ? a.data : {}, f.name);
-                    toggleDock(); // close dock on selection
-                    getEl('loading-overlay').style.display = 'none';
+                } else {
+                    alert("File not found");
                 }
-            };
-            dockContent.appendChild(card);
-        });
+            } catch (e) { console.error(e); }
+            getEl('loading-overlay').style.display = 'none';
+        }
     }
 
     // --- PDF LOGIC ---
     function render() {
         if (!pdfDoc) return;
-        
         pdfDoc.getPage(pageNum).then(page => {
             const scaleFactor = 1.5; 
             const viewport = page.getViewport({ scale: scaleFactor });
-            
-            pdfContainer.style.width = `${viewport.width}px`;
-            pdfContainer.style.height = `${viewport.height}px`;
+            pdfContainer.style.width = `${viewport.width}px`; pdfContainer.style.height = `${viewport.height}px`;
             pdfCanvas.width = viewport.width; pdfCanvas.height = viewport.height;
             annotationCanvas.width = viewport.width; annotationCanvas.height = viewport.height;
-
             pdfContainer.style.transform = `translate(${state.transform.offsetX}px, ${state.transform.offsetY}px) scale(${state.transform.scale})`;
-            
-            // 1. Zoom Indicator Update
             zoomIndicator.textContent = Math.round(state.transform.scale * 100) + '%';
-            
-            page.render({ canvasContext: pdfCtx, viewport: viewport }).promise.then(() => {
-                redrawAnnotations();
-            });
+            page.render({ canvasContext: pdfCtx, viewport: viewport }).promise.then(() => redrawAnnotations());
         });
         getEl('page-num-display').textContent = `Page ${pageNum}`;
         updatePageNavButtons();
@@ -361,9 +229,7 @@
     
     function redrawAnnotations() {
         annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
-        
         const listToDraw = [...(annotations[pageNum] || [])];
-        // If we are currently drawing a line or link, add temp path to list
         if (state.isDrawing && state.currentPath && (state.activeTool === 'line' || state.activeTool === 'link')) {
             listToDraw.push(state.currentPath);
         }
@@ -371,37 +237,15 @@
         listToDraw.forEach(anno => {
             annotationCtx.save();
             if (anno.type === 'link') {
-                // Draw Link Rectangle
-                annotationCtx.fillStyle = 'rgba(88, 101, 242, 0.2)';
-                annotationCtx.strokeStyle = 'rgba(88, 101, 242, 0.8)';
-                annotationCtx.lineWidth = 2;
-                annotationCtx.fillRect(anno.x, anno.y, anno.w, anno.h);
-                annotationCtx.strokeRect(anno.x, anno.y, anno.w, anno.h);
-                
-                // Draw Link Icon
-                annotationCtx.fillStyle = '#fff';
-                annotationCtx.font = '12px sans-serif';
-                annotationCtx.fillText("🔗", anno.x + 4, anno.y + 16);
+                annotationCtx.fillStyle = 'rgba(88, 101, 242, 0.2)'; annotationCtx.strokeStyle = 'rgba(88, 101, 242, 0.8)';
+                annotationCtx.lineWidth = 2; annotationCtx.fillRect(anno.x, anno.y, anno.w, anno.h); annotationCtx.strokeRect(anno.x, anno.y, anno.w, anno.h);
+                annotationCtx.fillStyle = '#fff'; annotationCtx.font = '12px sans-serif'; annotationCtx.fillText("🔗", anno.x + 4, anno.y + 16);
             } else {
-                // Draw Paths (Pen, Highlight, Line)
-                annotationCtx.beginPath();
-                annotationCtx.moveTo(anno.points[0].x, anno.points[0].y);
-                
-                if (anno.type === 'line') {
-                   // Straight line just connects start to end
-                   const end = anno.points[1] || anno.points[0];
-                   annotationCtx.lineTo(end.x, end.y);
-                } else {
-                    // Freehand
-                    anno.points.forEach(p => annotationCtx.lineTo(p.x, p.y));
-                }
-
+                annotationCtx.beginPath(); annotationCtx.moveTo(anno.points[0].x, anno.points[0].y);
+                if (anno.type === 'line') { const end = anno.points[1] || anno.points[0]; annotationCtx.lineTo(end.x, end.y); } 
+                else { anno.points.forEach(p => annotationCtx.lineTo(p.x, p.y)); }
                 if (anno.type === 'highlight') annotationCtx.globalAlpha = 0.4;
-                annotationCtx.strokeStyle = anno.color;
-                annotationCtx.lineWidth = anno.width;
-                annotationCtx.lineCap = 'round'; 
-                annotationCtx.lineJoin = 'round';
-                annotationCtx.stroke(); 
+                annotationCtx.strokeStyle = anno.color; annotationCtx.lineWidth = anno.width; annotationCtx.lineCap = 'round'; annotationCtx.lineJoin = 'round'; annotationCtx.stroke(); 
             }
             annotationCtx.restore();
         });
@@ -413,25 +257,17 @@
             const viewport = page.getViewport({ scale: 1.5 });
             const rect = mainContent.getBoundingClientRect();
             const scale = Math.min((rect.width / viewport.width) * 0.95, (rect.height / viewport.height) * 0.95);
-            const offsetX = (rect.width - (viewport.width * scale)) / 2;
-            const offsetY = (rect.height - (viewport.height * scale)) / 2;
-            state.transform = { scale, offsetX, offsetY };
+            state.transform = { scale, offsetX: (rect.width - (viewport.width * scale)) / 2, offsetY: (rect.height - (viewport.height * scale)) / 2 };
             render();
         });
     }
 
     async function loadFile(id, fileData, annotationData, name) {
-        currentFileId = id;
-        originalPdfBytes = fileData;
-        annotations = annotationData || {};
-        history = {}; redoStack = {};
+        currentFileId = id; originalPdfBytes = fileData; annotations = annotationData || {}; history = {}; redoStack = {};
         pdfDoc = await pdfjsLib.getDocument(new Uint8Array(originalPdfBytes)).promise;
-        pageNum = 1;
-        document.title = name || "PDF Editor";
+        pageNum = 1; document.title = name || "PDF Editor";
         fitToScreen();
         [saveBtn, downloadBtn, undoBtn, redoBtn].forEach(b => b.disabled = false);
-        saveBtn.disabled = false;
-        downloadBtn.disabled = false;
         updateUndoRedoButtons();
     }
 
@@ -440,6 +276,8 @@
     uploadInput.onchange = async e => {
         const file = e.target.files[0]; if (!file) return;
         const buffer = await file.arrayBuffer();
+        // Reset URL when uploading new file
+        window.history.pushState({}, document.title, window.location.pathname);
         await loadFile(null, buffer, {}, file.name);
     };
 
@@ -453,34 +291,25 @@
             fileId = Date.now();
         }
         getEl('loading-overlay').style.display = 'flex';
-        // 1. Capture Thumbnail
-        const thumbCvs = document.createElement('canvas');
-        const thumbSize = 120;
-        const ratio = pdfCanvas.width / pdfCanvas.height;
-        thumbCvs.width = thumbSize;
-        thumbCvs.height = thumbSize / ratio;
-        const tCtx = thumbCvs.getContext('2d');
-        tCtx.fillStyle = '#fff'; tCtx.fillRect(0,0,thumbCvs.width,thumbCvs.height);
-        tCtx.drawImage(pdfCanvas, 0,0,thumbCvs.width,thumbCvs.height);
-        tCtx.drawImage(annotationCanvas, 0,0,thumbCvs.width,thumbCvs.height);
+        // Thumbnail
+        const thumbCvs = document.createElement('canvas'); const thumbSize = 120;
+        const ratio = pdfCanvas.width / pdfCanvas.height; thumbCvs.width = thumbSize; thumbCvs.height = thumbSize / ratio;
+        const tCtx = thumbCvs.getContext('2d'); tCtx.fillStyle = '#fff'; tCtx.fillRect(0,0,thumbCvs.width,thumbCvs.height);
+        tCtx.drawImage(pdfCanvas, 0,0,thumbCvs.width,thumbCvs.height); tCtx.drawImage(annotationCanvas, 0,0,thumbCvs.width,thumbCvs.height);
         const thumbnailData = thumbCvs.toDataURL('image/jpeg', 0.6);
 
-        const fileData = { id: fileId, name: fileName, data: originalPdfBytes, thumbnail: thumbnailData };
-        const annoData = { fileId, data: annotations };
         const tx = db.transaction(['files', 'annotations'], 'readwrite');
-        tx.objectStore('files').put(fileData);
-        tx.objectStore('annotations').put(annoData);
+        tx.objectStore('files').put({ id: fileId, name: fileName, data: originalPdfBytes, thumbnail: thumbnailData });
+        tx.objectStore('annotations').put({ fileId, data: annotations });
         await tx.done;
         
-        currentFileId = fileId;
-        document.title = fileName;
+        currentFileId = fileId; document.title = fileName;
+        // Update URL to include ID
+        const url = new URL(window.location); url.searchParams.set('id', fileId); window.history.pushState({}, '', url);
         getEl('loading-overlay').style.display = 'none';
-        if(dockWrapper.classList.contains('open')) refreshDock();
-        else {
-            const originalText = filesToggleBtn.innerHTML;
-            filesToggleBtn.innerHTML = "✓ Saved";
-            setTimeout(() => filesToggleBtn.innerHTML = originalText, 1500);
-        }
+        
+        const originalText = saveBtn.innerHTML; saveBtn.innerHTML = "✓";
+        setTimeout(() => saveBtn.innerHTML = originalText, 1500);
     };
 
     downloadBtn.onclick = async () => {
@@ -496,15 +325,11 @@
             const page = pdfDocToModify.getPages()[idx];
             const { width, height } = page.getSize();
             
-            // Draw standard paths (lines/draw/highlight)
             let paths = (annotations[pn]||[]).filter(a => a.type !== 'link').map(a => {
                 const d = a.points.map((p,i) => {
-                    const x = p.x / renderScale;
-                    const y = height - (p.y / renderScale);
+                    const x = p.x / renderScale; const y = height - (p.y / renderScale);
                     return (i===0?'M':'L')+`${x.toFixed(2)} ${y.toFixed(2)}`;
                 }).join(' ');
-                
-                // For lines, ensure we close path or just draw line
                 return `<path d="${d}" stroke="${a.color}" stroke-width="${a.width/renderScale}" fill="none" stroke-opacity="${a.type==='highlight'?0.4:1}" stroke-linecap="round" stroke-linejoin="round"/>`;
             }).join('');
             
@@ -513,25 +338,12 @@
                 page.drawSvg(await pdfDocToModify.embedSvg(svg), {x:0, y:0, width, height});
             }
 
-            // Draw Links visually
             const links = (annotations[pn]||[]).filter(a => a.type === 'link');
             for (const l of links) {
-                const x = l.x / renderScale;
-                // PDF coordinates are bottom-up
-                const y = height - ((l.y + l.h) / renderScale);
-                const w = l.w / renderScale;
-                const h = l.h / renderScale;
-                
-                // Draw a blue box with the URL text so it's visible in export
-                page.drawRectangle({
-                    x, y, width: w, height: h,
-                    color: rgb(0.3, 0.4, 0.9), opacity: 0.2,
-                    borderColor: rgb(0.3, 0.4, 0.9), borderWidth: 1
-                });
-                page.drawText('LINK: ' + l.url, {
-                    x: x, y: y + h + 2,
-                    size: 8, color: rgb(0,0,0)
-                });
+                const x = l.x / renderScale; const y = height - ((l.y + l.h) / renderScale);
+                const w = l.w / renderScale; const h = l.h / renderScale;
+                page.drawRectangle({ x, y, width: w, height: h, color: rgb(0.3, 0.4, 0.9), opacity: 0.2, borderColor: rgb(0.3, 0.4, 0.9), borderWidth: 1 });
+                page.drawText('LINK: ' + l.url, { x: x, y: y + h + 2, size: 8, color: rgb(0,0,0) });
             }
         }
         const bytes = await pdfDocToModify.save();
@@ -544,22 +356,16 @@
     // --- INPUT HANDLING ---
     function getCanvasCoords(e) {
         const rect = annotationCanvas.getBoundingClientRect();
-        const scaleX = annotationCanvas.width / rect.width;
-        const scaleY = annotationCanvas.height / rect.height;
-        return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+        return { x: (e.clientX - rect.left) * (annotationCanvas.width / rect.width), y: (e.clientY - rect.top) * (annotationCanvas.height / rect.height) };
     }
 
     mainContent.addEventListener('wheel', e => {
-        if(e.ctrlKey) e.preventDefault();
-        e.preventDefault();
+        if(e.ctrlKey) e.preventDefault(); e.preventDefault();
         const rect = mainContent.getBoundingClientRect();
-        const { scale } = state.transform;
-        const newScale = e.deltaY < 0 ? scale * 1.1 : scale / 1.1;
-        
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-        state.transform.offsetX = mouseX - (mouseX - state.transform.offsetX) * (newScale / scale);
-        state.transform.offsetY = mouseY - (mouseY - state.transform.offsetY) * (newScale / scale);
+        const newScale = e.deltaY < 0 ? state.transform.scale * 1.1 : state.transform.scale / 1.1;
+        const mouseX = e.clientX - rect.left; const mouseY = e.clientY - rect.top;
+        state.transform.offsetX = mouseX - (mouseX - state.transform.offsetX) * (newScale / state.transform.scale);
+        state.transform.offsetY = mouseY - (mouseY - state.transform.offsetY) * (newScale / state.transform.scale);
         state.transform.scale = newScale;
         render();
     }, { passive: false });
@@ -567,100 +373,58 @@
     mainContent.addEventListener('pointerdown', e => {
         if (!pdfDoc) return;
         pointerCache.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        const isPen = e.pointerType === 'pen';
         const coords = getCanvasCoords(e);
         
-        // 3. CHECK CLICK ON LINKS (Only in Pan Mode)
-        if (state.activeTool === 'pan' && !isPen) {
+        if (state.activeTool === 'pan' && e.pointerType !== 'pen') {
             const links = (annotations[pageNum] || []).filter(a => a.type === 'link');
             for (const l of links) {
                 if (coords.x >= l.x && coords.x <= l.x + l.w && coords.y >= l.y && coords.y <= l.y + l.h) {
-                    let url = l.url;
-                    if(!url.startsWith('http')) url = 'https://' + url;
-                    window.open(url, '_blank');
-                    return; // Don't pan if we clicked a link
+                    let url = l.url; if(!url.startsWith('http')) url = 'https://' + url; window.open(url, '_blank'); return;
                 }
             }
         }
 
-        if (state.activeTool !== 'pan' && (isPen || state.activeTool !== 'pan')) {
+        if (state.activeTool !== 'pan') {
             state.isDrawing = true;
-            if (state.activeTool === 'eraser') {
-                recordHistory();
-                eraseAtPoint(coords);
-            } else if (state.activeTool === 'line' || state.activeTool === 'link') {
-                // Initialize straight line or link box
-                state.currentPath = { 
-                    type: state.activeTool, 
-                    start: coords, 
-                    points: [coords, coords], // index 0 is start, 1 is current end
-                    color: state.activeTool === 'link' ? state.toolSettings.link.color : state.toolSettings.line.color, 
-                    width: state.activeTool === 'link' ? 1 : state.toolSettings.line.width 
-                };
+            if (state.activeTool === 'eraser') { recordHistory(); eraseAtPoint(coords); } 
+            else if (state.activeTool === 'line' || state.activeTool === 'link') {
+                state.currentPath = { type: state.activeTool, start: coords, points: [coords, coords], color: state.activeTool === 'link' ? state.toolSettings.link.color : state.toolSettings.line.color, width: state.activeTool === 'link' ? 1 : state.toolSettings.line.width };
             } else {
-                // Freehand
-                recordHistory();
-                state.currentPath = { type: state.activeTool, points: [coords], color: state.toolSettings[state.activeTool].color, width: state.toolSettings[state.activeTool].width };
-                if(!annotations[pageNum]) annotations[pageNum] = [];
-                annotations[pageNum].push(state.currentPath);
+                recordHistory(); state.currentPath = { type: state.activeTool, points: [coords], color: state.toolSettings[state.activeTool].color, width: state.toolSettings[state.activeTool].width };
+                if(!annotations[pageNum]) annotations[pageNum] = []; annotations[pageNum].push(state.currentPath);
             }
         }
     });
 
     mainContent.addEventListener('pointermove', e => {
         if (!pointerCache.has(e.pointerId)) return;
-        const last = pointerCache.get(e.pointerId);
-        const coords = getCanvasCoords(e);
+        const last = pointerCache.get(e.pointerId); const coords = getCanvasCoords(e);
 
         if (state.isDrawing) {
-            if (state.activeTool === 'eraser') {
-                eraseAtPoint(coords);
-            } else if (state.activeTool === 'line') {
-                // 2. Straight Line Preview
-                state.currentPath.points[1] = coords;
-                redrawAnnotations();
-            } else if (state.activeTool === 'link') {
-                // 3. Link Box Preview
-                const start = state.currentPath.start;
-                const w = coords.x - start.x;
-                const h = coords.y - start.y;
-                // Normalize rect for rendering
-                state.currentPath.x = w < 0 ? coords.x : start.x;
-                state.currentPath.y = h < 0 ? coords.y : start.y;
-                state.currentPath.w = Math.abs(w);
-                state.currentPath.h = Math.abs(h);
-                redrawAnnotations();
-            } else {
-                // Freehand
-                state.currentPath.points.push(coords); 
-                redrawAnnotations(); 
-            }
+            if (state.activeTool === 'eraser') eraseAtPoint(coords);
+            else if (state.activeTool === 'line') { state.currentPath.points[1] = coords; redrawAnnotations(); } 
+            else if (state.activeTool === 'link') {
+                const start = state.currentPath.start; const w = coords.x - start.x; const h = coords.y - start.y;
+                state.currentPath.x = w < 0 ? coords.x : start.x; state.currentPath.y = h < 0 ? coords.y : start.y;
+                state.currentPath.w = Math.abs(w); state.currentPath.h = Math.abs(h); redrawAnnotations();
+            } else { state.currentPath.points.push(coords); redrawAnnotations(); }
         } else if (pointerCache.size === 1) {
-            // Pan logic
-            const isPen = e.pointerType === 'pen';
-            if (state.activeTool === 'pan' || (!isPen && !state.isDrawing)) {
+            if (state.activeTool === 'pan' || (e.pointerType !== 'pen' && !state.isDrawing)) {
                 pdfContainer.classList.add('panning');
-                state.transform.offsetX += e.clientX - last.x;
-                state.transform.offsetY += e.clientY - last.y;
-                render();
+                state.transform.offsetX += e.clientX - last.x; state.transform.offsetY += e.clientY - last.y; render();
             }
         } else if (pointerCache.size === 2) {
-            // Pinch Zoom
             const pointers = Array.from(pointerCache.values());
             const p1 = pointers[0].id === e.pointerId ? {x:e.clientX, y:e.clientY} : pointers[0];
             const p2 = pointers[1].id === e.pointerId ? {x:e.clientX, y:e.clientY} : pointers[1];
-            
             const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
             if (prevPinchDist) {
-                const oldScale = state.transform.scale;
-                const newScale = oldScale * (dist / prevPinchDist);
+                const newScale = state.transform.scale * (dist / prevPinchDist);
                 const midX = (p1.x + p2.x) / 2 - mainContent.getBoundingClientRect().left;
                 const midY = (p1.y + p2.y) / 2 - mainContent.getBoundingClientRect().top;
-                
-                state.transform.offsetX = midX - (midX - state.transform.offsetX) * (newScale / oldScale);
-                state.transform.offsetY = midY - (midY - state.transform.offsetY) * (newScale / oldScale);
-                state.transform.scale = newScale;
-                render();
+                state.transform.offsetX = midX - (midX - state.transform.offsetX) * (newScale / state.transform.scale);
+                state.transform.offsetY = midY - (midY - state.transform.offsetY) * (newScale / state.transform.scale);
+                state.transform.scale = newScale; render();
             }
             prevPinchDist = dist;
         }
@@ -668,106 +432,58 @@
     });
 
     function handleUp(e) {
-        pointerCache.delete(e.pointerId);
-        if(pointerCache.size < 2) prevPinchDist = null;
+        pointerCache.delete(e.pointerId); if(pointerCache.size < 2) prevPinchDist = null;
         if(pointerCache.size === 0) pdfContainer.classList.remove('panning');
-        
-        // Finalize drawing for Line or Link
         if (state.isDrawing) {
-            if (state.activeTool === 'line') {
-                recordHistory();
-                if(!annotations[pageNum]) annotations[pageNum] = [];
-                annotations[pageNum].push(state.currentPath);
-            } else if (state.activeTool === 'link') {
-                // 3. Finalize Link creation
+            if (state.activeTool === 'line') { recordHistory(); if(!annotations[pageNum]) annotations[pageNum] = []; annotations[pageNum].push(state.currentPath); } 
+            else if (state.activeTool === 'link') {
                 if (state.currentPath.w > 5 && state.currentPath.h > 5) {
                     const url = prompt("Enter URL for this link:", "https://");
                     if (url) {
-                        recordHistory();
-                        state.currentPath.url = url;
-                        // Clean up temp properties
-                        delete state.currentPath.points; delete state.currentPath.start;
-                        if(!annotations[pageNum]) annotations[pageNum] = [];
-                        annotations[pageNum].push(state.currentPath);
+                        recordHistory(); state.currentPath.url = url; delete state.currentPath.points; delete state.currentPath.start;
+                        if(!annotations[pageNum]) annotations[pageNum] = []; annotations[pageNum].push(state.currentPath);
                     }
                 }
             }
-            
-            state.isDrawing = false; 
-            state.currentPath = null;
-            redrawAnnotations();
-            updateUndoRedoButtons();
+            state.isDrawing = false; state.currentPath = null; redrawAnnotations(); updateUndoRedoButtons();
         }
     }
-    mainContent.addEventListener('pointerup', handleUp);
-    mainContent.addEventListener('pointercancel', handleUp);
-    mainContent.addEventListener('pointerleave', handleUp);
+    mainContent.addEventListener('pointerup', handleUp); mainContent.addEventListener('pointercancel', handleUp); mainContent.addEventListener('pointerleave', handleUp);
 
-    // --- UTILS ---
     function eraseAtPoint({x,y}) {
         const arr = annotations[pageNum] || [];
         for(let i=arr.length-1; i>=0; i--) {
-            const a = arr[i];
-            let hit = false;
-            
-            // Check Link Hit
-            if (a.type === 'link') {
-                if (x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h) hit = true;
-            } else {
-                // Check Path Hit
-                if (a.points.some(p => Math.hypot(p.x-x, p.y-y) < state.toolSettings.eraser.width)) hit = true;
-            }
-
-            if(hit) {
-                arr.splice(i,1); redrawAnnotations(); break;
-            }
+            const a = arr[i]; let hit = false;
+            if (a.type === 'link') { if (x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h) hit = true; } 
+            else { if (a.points.some(p => Math.hypot(p.x-x, p.y-y) < state.toolSettings.eraser.width)) hit = true; }
+            if(hit) { arr.splice(i,1); redrawAnnotations(); break; }
         }
     }
-    function recordHistory() {
-        if(!history[pageNum]) history[pageNum]=[];
-        history[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum]||[])));
-        redoStack[pageNum]=[];
-    }
-    function updateUndoRedoButtons(){
-        undoBtn.disabled = !history[pageNum]?.length; redoBtn.disabled = !redoStack[pageNum]?.length;
-    }
+    function recordHistory() { if(!history[pageNum]) history[pageNum]=[]; history[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum]||[]))); redoStack[pageNum]=[]; }
+    function updateUndoRedoButtons(){ undoBtn.disabled = !history[pageNum]?.length; redoBtn.disabled = !redoStack[pageNum]?.length; }
     undoBtn.onclick = () => { if(history[pageNum]?.length) { redoStack[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum]))); annotations[pageNum]=history[pageNum].pop(); redrawAnnotations(); updateUndoRedoButtons(); }};
     redoBtn.onclick = () => { if(redoStack[pageNum]?.length) { history[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum]))); annotations[pageNum]=redoStack[pageNum].pop(); redrawAnnotations(); updateUndoRedoButtons(); }};
     
-    function updatePageNavButtons(){
-        getEl('prev-page-overlay').classList.toggle('disabled', pageNum<=1);
-        getEl('next-page-overlay').classList.toggle('disabled', pageNum>=pdfDoc.numPages);
-    }
+    function updatePageNavButtons(){ getEl('prev-page-overlay').classList.toggle('disabled', pageNum<=1); getEl('next-page-overlay').classList.toggle('disabled', pageNum>=pdfDoc.numPages); }
     getEl('prev-page-overlay').onclick = () => {if(pageNum>1){pageNum--; render();}};
     getEl('next-page-overlay').onclick = () => {if(pageNum<pdfDoc.numPages){pageNum++; render();}};
     
     document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.onclick = () => {
-        document.querySelector('.tool-btn.active')?.classList.remove('active');
-        b.classList.add('active');
-        state.activeTool = b.dataset.tool;
-        
-        // Update PDF cursor based on tool
-        pdfContainer.setAttribute('data-tool', state.activeTool);
-        
-        // Tool properties
-        const t = state.activeTool;
-        const propDiv = getEl('tool-properties');
-        propDiv.innerHTML = '';
+        document.querySelector('.tool-btn.active')?.classList.remove('active'); b.classList.add('active');
+        state.activeTool = b.dataset.tool; pdfContainer.setAttribute('data-tool', state.activeTool);
+        const t = state.activeTool; const propDiv = getEl('tool-properties'); propDiv.innerHTML = '';
         if(t==='draw'||t==='highlight'||t==='line'){
             propDiv.innerHTML = `<input type="color" id="tc" value="${state.toolSettings[t].color}"><input type="range" id="tw" min="1" max="40" value="${state.toolSettings[t].width}">`;
-            getEl('tc').oninput=e=>state.toolSettings[t].color=e.target.value;
-            getEl('tw').oninput=e=>state.toolSettings[t].width=parseInt(e.target.value);
+            getEl('tc').oninput=e=>state.toolSettings[t].color=e.target.value; getEl('tw').oninput=e=>state.toolSettings[t].width=parseInt(e.target.value);
         }
     });
     getEl('reset-view-btn').onclick = fitToScreen;
     
-    // Boot
     openDB().then(() => {
         document.querySelector('[data-tool="pan"]').classList.add('active');
-        refreshDock();
+        checkURLForFile();
     });
     window.addEventListener('resize', fitToScreen);
-
     </script>
 </body>
 </html>
