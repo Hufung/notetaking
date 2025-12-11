@@ -3,114 +3,134 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Local PDF Editor - Fixed</title>
+    <title>PDF Editor with Dock</title>
     
     <style>
         /* General Setup */
         :root {
-            --bg-dark: #2c2f33; --bg-medium: #40444b; --bg-light: #525659;
-            --text-light: #ffffff; --text-medium: #b9bbbe; --accent: #7289da;
+            --bg-dark: #202225; --bg-medium: #2f3136; --bg-light: #36393f;
+            --text-light: #ffffff; --text-muted: #dcddde; --accent: #5865f2;
+            --dock-height: 140px;
         }
         html, body {
             margin: 0; padding: 0; height: 100%; width: 100%;
             overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg-light); color: var(--text-light);
-            touch-action: none; /* Critical for tablet */
+            touch-action: none; /* GLOBAL DISABLE SCROLL for App-like feel */
         }
 
         /* App Layout */
         .app-container { display: flex; flex-direction: column; height: 100vh; }
-        .main-content { flex-grow: 1; display: flex; justify-content: center; align-items: center; overflow: hidden; position: relative; background: var(--bg-light); }
+        
+        /* Main Viewport */
+        .main-content { 
+            flex-grow: 1; 
+            position: relative; 
+            background: var(--bg-light); 
+            overflow: hidden;
+            touch-action: none; /* CRITICAL: Allows pinch zoom to work without browser interference */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
 
         /* Toolbar */
         .toolbar {
             flex-shrink: 0; background-color: var(--bg-dark); padding: 8px 16px;
-            display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 16px; 
+            display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; 
             box-shadow: 0 2px 8px rgba(0,0,0,0.3); z-index: 1000;
         }
-        .tool-group { display: flex; align-items: center; gap: 8px; border-left: 1px solid var(--bg-light); padding-left: 16px; }
+        .tool-group { display: flex; align-items: center; gap: 6px; border-left: 1px solid var(--bg-light); padding-left: 12px; }
         .tool-btn {
-            background: none; border: 2px solid transparent; border-radius: 8px; padding: 8px; 
+            background: none; border: 2px solid transparent; border-radius: 6px; padding: 6px; 
             cursor: pointer; display: flex; align-items: center; justify-content: center;
-            transition: background-color 0.2s, border-color 0.2s;
+            color: var(--text-muted);
         }
-        .tool-btn svg { width: 24px; height: 24px; stroke: var(--text-medium); transition: stroke 0.2s; }
-        .tool-btn:hover { background-color: var(--bg-medium); }
-        .tool-btn.active { background-color: var(--bg-medium); border-color: var(--accent); }
-        .tool-btn.active svg { stroke: var(--accent); }
-        .tool-btn:disabled { cursor: not-allowed; opacity: 0.5; }
+        .tool-btn svg { width: 22px; height: 22px; stroke-width: 2; stroke: currentColor; }
+        .tool-btn:hover { background-color: var(--bg-medium); color: var(--text-light); }
+        .tool-btn.active { background-color: var(--accent); color: white; border-color: var(--accent); }
+        .tool-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        #page-num-display { font-size: 14px; font-variant-numeric: tabular-nums; min-width: 80px; text-align: center; }
 
-        /* Tool Properties Bar */
-        #tool-properties { display: flex; align-items: center; gap: 12px; }
-        input[type="color"] { border: none; background: none; width: 32px; height: 32px; cursor: pointer; border-radius: 50%; overflow: hidden; }
-        input[type="range"] { cursor: pointer; }
-        #stroke-width-label { min-width: 20px; text-align: center; }
+        /* Tool Properties */
+        #tool-properties { display: flex; align-items: center; gap: 10px; }
+        input[type="color"] { border: none; width: 28px; height: 28px; padding: 0; background: none; cursor: pointer; }
+        input[type="range"] { width: 80px; cursor: pointer; }
 
-        /* PDF Viewer & Centering */
-        #pdf-wrapper { 
-            position: relative; 
-            width: 100%; 
-            height: 100%; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            overflow: hidden; 
-        }
-
+        /* PDF Canvas Area */
         #pdf-viewer-container {
             position: absolute; 
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-            touch-action: none;
-            /* CRITICAL FIX: Transform origin must be top-left */
-            transform-origin: 0 0; 
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
+            transform-origin: 0 0; /* Keeps zoom logic simple */
             will-change: transform;
         }
-
         #pdf-viewer-container[data-tool="pan"] { cursor: grab; }
         #pdf-viewer-container[data-tool="pan"].panning { cursor: grabbing; }
         #pdf-canvas, #annotation-canvas { position: absolute; top: 0; left: 0; pointer-events: none; }
         
-        /* On-Screen Page Navigation */
+        /* Page Navigation Zones */
         .page-nav {
             position: absolute; top: 50%; transform: translateY(-50%);
-            width: 50px; height: 100px; background: rgba(0,0,0,0.2);
-            border-radius: 10px; display: flex; justify-content: center; align-items: center;
-            cursor: pointer; z-index: 500; opacity: 0; transition: opacity 0.3s;
+            width: 60px; height: 120px; background: rgba(0,0,0,0.1);
+            border-radius: 12px; display: flex; justify-content: center; align-items: center;
+            cursor: pointer; z-index: 500; opacity: 0; transition: opacity 0.2s;
         }
-        .main-content:hover .page-nav { opacity: 0.7; }
-        .page-nav:hover { background: rgba(0,0,0,0.5); opacity: 1; }
-        #prev-page-overlay { left: 20px; }
-        #next-page-overlay { right: 20px; }
+        .main-content:hover .page-nav { opacity: 1; }
+        .page-nav:hover { background: rgba(0,0,0,0.4); }
+        #prev-page-overlay { left: 10px; }
+        #next-page-overlay { right: 10px; }
         .page-nav.disabled { display: none; }
 
-        /* Modals (File Manager) & Overlays */
-        .modal-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7);
-            display: none; justify-content: center; align-items: center; z-index: 9998;
+        /* DOCK SYSTEM */
+        .dock-container {
+            flex-shrink: 0;
+            height: var(--dock-height);
+            background-color: var(--bg-dark);
+            border-top: 1px solid #111;
+            display: flex;
+            align-items: center;
+            overflow-x: auto;
+            padding: 0 20px;
+            gap: 15px;
+            z-index: 2000;
         }
-        .modal {
-            background: var(--bg-dark); color: var(--text-light); padding: 24px;
-            border-radius: 8px; box-shadow: 0 5px 25px rgba(0,0,0,0.5);
-            width: 90%; max-width: 600px; max-height: 80vh; overflow-y: auto;
+        .dock-container::-webkit-scrollbar { height: 8px; }
+        .dock-container::-webkit-scrollbar-thumb { background: var(--bg-medium); border-radius: 4px; }
+        
+        .dock-item {
+            display: flex; flex-direction: column; align-items: center;
+            width: 90px; cursor: pointer; position: relative;
+            transition: transform 0.2s;
+            flex-shrink: 0;
         }
-        .modal h2 { margin-top: 0; }
-        #file-list { list-style: none; padding: 0; }
-        #file-list li {
-            background: var(--bg-medium); padding: 12px; border-radius: 6px;
-            margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;
+        .dock-item:hover { transform: translateY(-5px); }
+        .dock-thumb {
+            width: 80px; height: 80px; background: white;
+            border-radius: 8px; border: 2px solid var(--bg-medium);
+            object-fit: contain; background-color: #555;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
-        #file-list .file-actions button { background-color: var(--bg-light); color: var(--text-light); border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; margin-left: 8px; }
-        #file-list .file-actions button:hover { background-color: var(--accent); }
-        .modal-close { float: right; cursor: pointer; font-size: 24px; }
+        .dock-item.active .dock-thumb { border-color: var(--accent); box-shadow: 0 0 10px var(--accent); }
+        .dock-label {
+            font-size: 11px; margin-top: 6px; text-align: center;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;
+            color: var(--text-muted);
+        }
+        .dock-empty { color: var(--text-muted); width: 100%; text-align: center; font-style: italic; }
+        .delete-badge {
+            position: absolute; top: -5px; right: 0;
+            background: red; color: white; border-radius: 50%; width: 20px; height: 20px;
+            display: none; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;
+        }
+        .dock-item:hover .delete-badge { display: flex; }
 
-        /* LOADING OVERLAY - FIX: Hidden by default */
+        /* Loading */
         #loading-overlay { 
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(0,0,0,0.5); 
-            display: none; /* <--- FIXED HERE */
+            background: rgba(0,0,0,0.6); display: none; 
             justify-content: center; align-items: center; z-index: 9999; 
         }
-        .spinner { width: 50px; height: 50px; border: 5px solid var(--bg-light); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+        .spinner { width: 40px; height: 40px; border: 4px solid #fff; border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
@@ -120,46 +140,40 @@
         <div class="toolbar">
             <input type="file" id="pdf-upload" accept="application/pdf" style="display: none;">
             <div class="tool-group">
-                <button class="tool-btn" id="files-btn" title="Open Local Files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg></button>
-                <button class="tool-btn" id="upload-btn" title="Import New PDF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg></button>
-                <button class="tool-btn" id="save-btn" disabled title="Save to Browser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg></button>
+                <!-- Using only the upload button now, files are in the dock -->
+                <button class="tool-btn" id="upload-btn" title="Open New PDF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg></button>
+                <button class="tool-btn" id="save-btn" disabled title="Save to Dock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg></button>
             </div>
-            <span id="page-num-display">No PDF Loaded</span>
+            <span id="page-num-display">No File</span>
             <div class="tool-group">
-                <button class="tool-btn" id="undo-btn" disabled title="Undo (Ctrl+Z)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 14H6l-4-4 4-4h15v8zM3 10h18"></path></svg></button>
-                <button class="tool-btn" id="redo-btn" disabled title="Redo (Ctrl+Y)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 14h15l4-4-4-4H3v8zM21 10H3"></path></svg></button>
+                <button class="tool-btn" id="undo-btn" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 14H6l-4-4 4-4h15v8zM3 10h18"></path></svg></button>
+                <button class="tool-btn" id="redo-btn" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 14h15l4-4-4-4H3v8zM21 10H3"></path></svg></button>
             </div>
             <div class="tool-group">
-                <button class="tool-btn" data-tool="pan" title="Move View (M)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
-                <button class="tool-btn" data-tool="draw" title="Pen (P)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg></button>
-                <button class="tool-btn" data-tool="highlight" title="Highlighter (H)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg></button>
-                <button class="tool-btn" data-tool="eraser" title="Eraser (E)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.24 7.76l-2.49-2.49a1.5 1.5 0 0 0-2.12 0L3.37 17.51l-1.37 4.86 4.86-1.37L19.12 8.88a1.5 1.5 0 0 0 0-2.12zM15 9l3 3"/></svg></button>
+                <button class="tool-btn" data-tool="pan" title="Pan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+                <button class="tool-btn" data-tool="draw" title="Pen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg></button>
+                <button class="tool-btn" data-tool="highlight" title="Marker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg></button>
+                <button class="tool-btn" data-tool="eraser" title="Eraser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20.24 7.76l-2.49-2.49a1.5 1.5 0 0 0-2.12 0L3.37 17.51l-1.37 4.86 4.86-1.37L19.12 8.88a1.5 1.5 0 0 0 0-2.12zM15 9l3 3"/></svg></button>
             </div>
             <div id="tool-properties" class="tool-group"></div>
              <div class="tool-group">
-                <button class="tool-btn" id="reset-view-btn" title="Fit to Screen (F)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
-                <button class="tool-btn" id="download-btn" disabled title="Download a Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></button>
+                <button class="tool-btn" id="reset-view-btn" title="Fit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
+                <button class="tool-btn" id="download-btn" disabled title="Export"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></button>
             </div>
         </div>
         
         <div class="main-content" id="main-content">
-            <div id="pdf-wrapper">
-                <div id="pdf-viewer-container">
-                    <canvas id="pdf-canvas"></canvas>
-                    <canvas id="annotation-canvas"></canvas>
-                </div>
+            <div id="pdf-viewer-container">
+                <canvas id="pdf-canvas"></canvas>
+                <canvas id="annotation-canvas"></canvas>
             </div>
-            <div id="prev-page-overlay" class="page-nav disabled">...</div>
-            <div id="next-page-overlay" class="page-nav disabled">...</div>
+            <div id="prev-page-overlay" class="page-nav disabled">‹</div>
+            <div id="next-page-overlay" class="page-nav disabled">›</div>
         </div>
-    </div>
 
-    <!-- File Manager Modal -->
-    <div id="files-modal" class="modal-overlay">
-        <div class="modal">
-            <span class="modal-close" id="files-modal-close">&times;</span>
-            <h2>My Local Files</h2>
-            <ul id="file-list"><li>No files saved yet.</li></ul>
+        <!-- THE DOCK -->
+        <div class="dock-container" id="dock-container">
+            <div class="dock-empty">Loading saved files...</div>
         </div>
     </div>
     
@@ -169,21 +183,22 @@
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 
     <script>
-    // --- SETUP & DOM ELEMENTS ---
+    // --- SETUP ---
     pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@2.16.105/build/pdf.worker.min.js`;
     
     const getEl = id => document.getElementById(id);
+    const mainContent = getEl('main-content');
     const uploadInput = getEl('pdf-upload'), uploadBtn = getEl('upload-btn'), saveBtn = getEl('save-btn');
     const pdfCanvas = getEl('pdf-canvas'), annotationCanvas = getEl('annotation-canvas');
     const pdfCtx = pdfCanvas.getContext('2d'), annotationCtx = annotationCanvas.getContext('2d');
     const pageNumDisplay = getEl('page-num-display'), downloadBtn = getEl('download-btn');
-    const viewerContainer = getEl('main-content'), pdfContainer = getEl('pdf-viewer-container');
+    const pdfContainer = getEl('pdf-viewer-container');
     const loadingOverlay = getEl('loading-overlay'), toolPropertiesContainer = getEl('tool-properties');
     const prevPageOverlay = getEl('prev-page-overlay'), nextPageOverlay = getEl('next-page-overlay');
-    const filesBtn = getEl('files-btn'), filesModal = getEl('files-modal'), fileList = getEl('file-list');
     const undoBtn = getEl('undo-btn'), redoBtn = getEl('redo-btn');
+    const dockContainer = getEl('dock-container');
 
-    // --- STATE MANAGEMENT ---
+    // --- STATE ---
     let pdfDoc = null, originalPdfBytes = null, pageNum = 1, currentFileId = null;
     let annotations = {};
     let history = {}, redoStack = {};
@@ -198,57 +213,94 @@
     const pointerCache = new Map();
     let prevPinchDist = null;
 
-    // --- DATABASE (INDEXEDDB) ---
-    const DB_NAME = 'PDFEditorDB', DB_VERSION = 1;
+    // --- DB & DOCK ---
+    const DB_NAME = 'PDFEditorDockDB', DB_VERSION = 1;
     let db;
+
     function openDB() {
-        return new Promise((resolve, reject) => {
-            try {
-                const request = indexedDB.open(DB_NAME, DB_VERSION);
-                request.onerror = () => { 
-                    console.warn("Database blocked or failed."); 
-                    resolve(null); // Resolve null to allow app to continue without DB
-                };
-                request.onsuccess = () => { db = request.result; isDbReady = true; resolve(db); };
-                request.onupgradeneeded = e => {
-                    const db = e.target.result;
-                    db.createObjectStore('files', { keyPath: 'id' });
-                    db.createObjectStore('annotations', { keyPath: 'fileId' });
-                };
-            } catch(e) {
-                console.warn("IndexedDB not available");
-                resolve(null);
-            }
+        return new Promise((resolve) => {
+            const req = indexedDB.open(DB_NAME, DB_VERSION);
+            req.onerror = () => { console.warn("DB Blocked"); resolve(null); };
+            req.onsuccess = () => { db = req.result; isDbReady = true; resolve(db); };
+            req.onupgradeneeded = e => {
+                const db = e.target.result;
+                // Files store: id, name, data, thumbnail
+                if(!db.objectStoreNames.contains('files')) db.createObjectStore('files', { keyPath: 'id' });
+                // Annotations store: fileId, data
+                if(!db.objectStoreNames.contains('annotations')) db.createObjectStore('annotations', { keyPath: 'fileId' });
+            };
         });
     }
 
-    // --- RENDER & VIEW ---
+    async function refreshDock() {
+        if (!isDbReady) { dockContainer.innerHTML = '<div class="dock-empty">Local Storage Unavailable</div>'; return; }
+        const tx = db.transaction('files', 'readonly');
+        const files = await tx.objectStore('files').getAll();
+        
+        dockContainer.innerHTML = '';
+        if (files.length === 0) {
+            dockContainer.innerHTML = '<div class="dock-empty">No saved files</div>';
+        } else {
+            files.forEach(file => {
+                const item = document.createElement('div');
+                item.className = `dock-item ${file.id === currentFileId ? 'active' : ''}`;
+                
+                // Use saved thumbnail or a generic placeholder
+                const thumbSrc = file.thumbnail || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2NjYyIgZD0iTTE0IDJINmEyIDIgMCAwIDAtMiAydjE2YTIgMiAwIDAgMCAyIDJoMTJhMiAyIDAgMCAwIDItMlY4bC02LTZ6bTEgN3Y1aDV6Ii8+PC9zdmc+';
+                
+                item.innerHTML = `
+                    <div class="delete-badge" title="Delete">×</div>
+                    <img src="${thumbSrc}" class="dock-thumb">
+                    <div class="dock-label">${file.name}</div>
+                `;
+                
+                // Click to load
+                item.onclick = async (e) => {
+                    if (e.target.classList.contains('delete-badge')) {
+                        e.stopPropagation();
+                        if (confirm(`Delete "${file.name}"?`)) {
+                            const txDel = db.transaction(['files', 'annotations'], 'readwrite');
+                            txDel.objectStore('files').delete(file.id);
+                            txDel.objectStore('annotations').delete(file.id);
+                            await txDel.done;
+                            if (currentFileId === file.id) window.location.reload();
+                            refreshDock();
+                        }
+                    } else if (file.id !== currentFileId) {
+                        const txLoad = db.transaction(['files', 'annotations'], 'readonly');
+                        const f = await txLoad.objectStore('files').get(file.id);
+                        const a = await txLoad.objectStore('annotations').get(file.id);
+                        await loadFile(f.id, f.data, a ? a.data : {}, f.name);
+                        refreshDock(); // update active state
+                    }
+                };
+                dockContainer.appendChild(item);
+            });
+        }
+    }
+
+    // --- MAIN LOGIC ---
     function render() {
         if (!pdfDoc) return;
         loadingOverlay.style.display = 'flex';
         
         pdfDoc.getPage(pageNum).then(page => {
-            const scaleFactor = 1.5; // High resolution render
-            const pdfViewport = page.getViewport({ scale: scaleFactor });
+            const scaleFactor = 1.5; 
+            const viewport = page.getViewport({ scale: scaleFactor });
             
-            pdfContainer.style.width = `${pdfViewport.width}px`;
-            pdfContainer.style.height = `${pdfViewport.height}px`;
-            pdfCanvas.width = pdfViewport.width; 
-            pdfCanvas.height = pdfViewport.height;
-            annotationCanvas.width = pdfViewport.width; 
-            annotationCanvas.height = pdfViewport.height;
+            pdfContainer.style.width = `${viewport.width}px`;
+            pdfContainer.style.height = `${viewport.height}px`;
+            pdfCanvas.width = viewport.width; pdfCanvas.height = viewport.height;
+            annotationCanvas.width = viewport.width; annotationCanvas.height = viewport.height;
 
             pdfContainer.style.transform = `translate(${state.transform.offsetX}px, ${state.transform.offsetY}px) scale(${state.transform.scale})`;
             
-            page.render({ canvasContext: pdfCtx, viewport: pdfViewport }).promise.then(() => {
+            page.render({ canvasContext: pdfCtx, viewport: viewport }).promise.then(() => {
                 redrawAnnotations();
-                loadingOverlay.style.display = 'none';
-            }).catch(e => {
-                console.error("Render Error:", e);
                 loadingOverlay.style.display = 'none';
             });
         });
-        pageNumDisplay.textContent = `Page ${pageNum} / ${pdfDoc.numPages}`;
+        pageNumDisplay.textContent = `${pageNum} / ${pdfDoc.numPages}`;
         updatePageNavButtons();
     }
     
@@ -258,14 +310,11 @@
             annotationCtx.beginPath();
             annotationCtx.moveTo(anno.points[0].x, anno.points[0].y);
             anno.points.forEach(p => annotationCtx.lineTo(p.x, p.y));
-            
             if (anno.type === 'highlight') annotationCtx.globalAlpha = 0.4;
             annotationCtx.strokeStyle = anno.color;
             annotationCtx.lineWidth = anno.width;
-            annotationCtx.lineCap = 'round';
-            annotationCtx.lineJoin = 'round';
-            annotationCtx.stroke();
-            annotationCtx.globalAlpha = 1.0;
+            annotationCtx.lineCap = 'round'; annotationCtx.lineJoin = 'round';
+            annotationCtx.stroke(); annotationCtx.globalAlpha = 1.0;
         });
     }
     
@@ -273,302 +322,273 @@
         if (!pdfDoc) return;
         pdfDoc.getPage(pageNum).then(page => {
             const viewport = page.getViewport({ scale: 1.5 });
-            const containerW = viewerContainer.clientWidth;
-            const containerH = viewerContainer.clientHeight;
-            const scale = Math.min((containerW / viewport.width) * 0.95, (containerH / viewport.height) * 0.95);
-            const offsetX = (containerW - (viewport.width * scale)) / 2;
-            const offsetY = (containerH - (viewport.height * scale)) / 2;
+            const rect = mainContent.getBoundingClientRect();
+            const scale = Math.min((rect.width / viewport.width) * 0.9, (rect.height / viewport.height) * 0.9);
+            const offsetX = (rect.width - (viewport.width * scale)) / 2;
+            const offsetY = (rect.height - (viewport.height * scale)) / 2;
             state.transform = { scale, offsetX, offsetY };
             render();
         });
     }
 
-    // --- UNDO/REDO & HISTORY ---
-    function recordHistory() {
-        if (!history[pageNum]) history[pageNum] = [];
-        history[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum] || [])));
-        redoStack[pageNum] = [];
-        updateUndoRedoButtons();
-    }
-    function undo() {
-        if (!history[pageNum] || history[pageNum].length === 0) return;
-        if (!redoStack[pageNum]) redoStack[pageNum] = [];
-        redoStack[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum] || [])));
-        annotations[pageNum] = history[pageNum].pop();
-        redrawAnnotations();
-        updateUndoRedoButtons();
-    }
-    function redo() {
-        if (!redoStack[pageNum] || redoStack[pageNum].length === 0) return;
-        if (!history[pageNum]) history[pageNum] = [];
-        history[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum] || [])));
-        annotations[pageNum] = redoStack[pageNum].pop();
-        redrawAnnotations();
-        updateUndoRedoButtons();
-    }
-    function updateUndoRedoButtons() {
-        undoBtn.disabled = !history[pageNum] || history[pageNum].length === 0;
-        redoBtn.disabled = !redoStack[pageNum] || redoStack[pageNum].length === 0;
-    }
-    function updatePageNavButtons() {
-        prevPageOverlay.classList.toggle('disabled', pageNum <= 1);
-        nextPageOverlay.classList.toggle('disabled', pageNum >= pdfDoc.numPages);
-    }
-
-    // --- FILE I/O ---
-    async function loadFile(id, fileData, annotationData) {
+    async function loadFile(id, fileData, annotationData, name) {
         currentFileId = id;
         originalPdfBytes = fileData;
         annotations = annotationData || {};
         history = {}; redoStack = {};
         pdfDoc = await pdfjsLib.getDocument(new Uint8Array(originalPdfBytes)).promise;
         pageNum = 1;
+        document.title = name ? name : "PDF Editor";
         fitToScreen();
         [saveBtn, downloadBtn].forEach(b => b.disabled = false);
         updateUndoRedoButtons();
     }
-    
-    uploadBtn.addEventListener('click', () => uploadInput.click());
-    uploadInput.addEventListener('change', async e => {
+
+    // --- EVENT LISTENERS ---
+    uploadBtn.onclick = () => uploadInput.click();
+    uploadInput.onchange = async e => {
         const file = e.target.files[0]; if (!file) return;
-        const tempName = file.name;
         const buffer = await file.arrayBuffer();
-        currentFileId = null; 
-        document.title = `${tempName}* - PDF Editor`;
-        await loadFile(null, buffer, {});
-    });
+        await loadFile(null, buffer, {}, file.name);
+        refreshDock();
+    };
 
-    saveBtn.addEventListener('click', async () => {
+    saveBtn.onclick = async () => {
         if (!pdfDoc) return;
-        if (!isDbReady) { alert("Local saving is disabled (Database unavailable). Use Download."); return; }
-        loadingOverlay.style.display = 'flex';
+        if (!isDbReady) { alert("Database error"); return; }
+        
         let fileId = currentFileId;
+        let fileName = document.title;
+
         if (!fileId) {
-            const fileName = prompt("Enter a name for this file:", document.title.replace('* - PDF Editor', ''));
-            if (!fileName) { loadingOverlay.style.display = 'none'; return; }
+            fileName = prompt("Name this file:", fileName.replace('*', ''));
+            if (!fileName) return;
             fileId = Date.now();
-            const fileData = { id: fileId, name: fileName, data: originalPdfBytes };
-            const tx = db.transaction('files', 'readwrite');
-            await tx.objectStore('files').put(fileData);
-            await tx.done;
-            currentFileId = fileId;
-            document.title = `${fileName} - PDF Editor`;
         }
-        const annotationData = { fileId, data: annotations };
-        const txAnno = db.transaction('annotations', 'readwrite');
-        await txAnno.objectStore('annotations').put(annotationData);
-        await txAnno.done;
+
+        loadingOverlay.style.display = 'flex';
+
+        // GENERATE THUMBNAIL (Take screenshot of current view)
+        // We draw the PDF canvas onto a smaller canvas
+        const thumbCvs = document.createElement('canvas');
+        const thumbSize = 100; // px
+        const ratio = pdfCanvas.width / pdfCanvas.height;
+        thumbCvs.width = thumbSize;
+        thumbCvs.height = thumbSize / ratio;
+        const tCtx = thumbCvs.getContext('2d');
+        // White background
+        tCtx.fillStyle = '#fff';
+        tCtx.fillRect(0, 0, thumbCvs.width, thumbCvs.height);
+        tCtx.drawImage(pdfCanvas, 0, 0, thumbCvs.width, thumbCvs.height);
+        const thumbnailData = thumbCvs.toDataURL('image/jpeg', 0.7);
+
+        // SAVE TO DB
+        const fileData = { id: fileId, name: fileName, data: originalPdfBytes, thumbnail: thumbnailData };
+        const annoData = { fileId, data: annotations };
+        
+        const tx = db.transaction(['files', 'annotations'], 'readwrite');
+        tx.objectStore('files').put(fileData);
+        tx.objectStore('annotations').put(annoData);
+        await tx.done;
+        
+        currentFileId = fileId;
+        document.title = fileName;
         loadingOverlay.style.display = 'none';
-        alert("File saved locally!");
-    });
-    
-    filesBtn.addEventListener('click', async () => {
-        if (!isDbReady) { alert("Local storage is unavailable."); return; }
-        const tx = db.transaction('files', 'readonly');
-        const allFiles = await tx.objectStore('files').getAll();
-        fileList.innerHTML = '';
-        if (allFiles.length === 0) {
-            fileList.innerHTML = '<li>No files saved yet.</li>';
-        } else {
-            allFiles.forEach(file => {
-                const li = document.createElement('li');
-                li.innerHTML = `<span>${file.name}</span><div class="file-actions"><button data-id="${file.id}" class="open-file">Open</button><button data-id="${file.id}" class="delete-file">Delete</button></div>`;
-                fileList.appendChild(li);
-            });
-        }
-        filesModal.style.display = 'flex';
-    });
-    
-    fileList.addEventListener('click', async e => {
-        const id = parseInt(e.target.dataset.id);
-        if (e.target.classList.contains('open-file')) {
-            const fileTx = db.transaction('files', 'readonly');
-            const file = await fileTx.objectStore('files').get(id);
-            const annoTx = db.transaction('annotations', 'readonly');
-            const anno = await annoTx.objectStore('annotations').get(id);
-            if (file) {
-                document.title = `${file.name} - PDF Editor`;
-                await loadFile(id, file.data, anno ? anno.data : {});
-            }
-            filesModal.style.display = 'none';
-        }
-        if (e.target.classList.contains('delete-file')) {
-            if (confirm("Are you sure?")) {
-                await db.delete('files', id);
-                await db.delete('annotations', id);
-                filesBtn.click();
-            }
-        }
-    });
+        refreshDock();
+    };
 
-    getEl('files-modal-close').addEventListener('click', () => filesModal.style.display = 'none');
-    
-    // --- TOOL ACTIONS ---
-    document.getElementById('reset-view-btn').addEventListener('click', fitToScreen);
-    document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => btn.addEventListener('click', () => setActiveTool(btn.dataset.tool)));
-    prevPageOverlay.addEventListener('click', () => { if (pageNum > 1) { pageNum--; render(); }});
-    nextPageOverlay.addEventListener('click', () => { if (pageNum < pdfDoc.numPages) { pageNum++; render(); }});
-    undoBtn.addEventListener('click', undo);
-    redoBtn.addEventListener('click', redo);
-
-    function setActiveTool(tool) {
-        document.querySelector('.tool-btn.active')?.classList.remove('active');
-        document.querySelector(`.tool-btn[data-tool="${tool}"]`)?.classList.add('active');
-        state.activeTool = tool;
-        pdfContainer.dataset.tool = tool;
-        updateToolPropertiesUI();
-    }
-    
-    function updateToolPropertiesUI() {
-        toolPropertiesContainer.innerHTML = ''; const tool = state.activeTool;
-        if (tool === 'draw' || tool === 'highlight') {
-            const settings = state.toolSettings[tool];
-            toolPropertiesContainer.innerHTML = `<div class="prop-item"><input type="color" id="tool-color" value="${settings.color}"></div><div class="prop-item"><input type="range" id="tool-width" min="1" max="50" value="${settings.width}"><span id="stroke-width-label">${settings.width}</span></div>`;
-            getEl('tool-color').oninput = e => settings.color = e.target.value;
-            getEl('tool-width').oninput = e => { settings.width = e.target.value; getEl('stroke-width-label').textContent = e.target.value; };
-        }
-    }
-    
-    function goToPrevPage() { if (pageNum > 1) { pageNum--; render(); } }
-    function goToNextPage() { if (pageNum < pdfDoc.numPages) { pageNum++; render(); } }
-
-    // --- COORDINATE MAPPING & POINTER EVENTS ---
+    // --- POINTER & ZOOM LOGIC ---
     function getCanvasCoords(e) {
         const rect = annotationCanvas.getBoundingClientRect();
-        const visualX = e.clientX - rect.left;
-        const visualY = e.clientY - rect.top;
         const scaleX = annotationCanvas.width / rect.width;
         const scaleY = annotationCanvas.height / rect.height;
-        return { x: visualX * scaleX, y: visualY * scaleY };
+        return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
     }
 
-    viewerContainer.addEventListener('wheel', e => {
-        e.preventDefault(); 
-        const rect = pdfContainer.getBoundingClientRect(); 
-        const { scale } = state.transform; 
+    mainContent.addEventListener('wheel', e => {
+        if(e.ctrlKey) e.preventDefault(); // Browser zoom
+        e.preventDefault();
+        const rect = pdfContainer.getBoundingClientRect();
+        const { scale } = state.transform;
         const newScale = e.deltaY < 0 ? scale * 1.1 : scale / 1.1;
-        const wrapperRect = viewerContainer.getBoundingClientRect();
-        const mouseInWrapperX = e.clientX - wrapperRect.left;
-        const mouseInWrapperY = e.clientY - wrapperRect.top;
-        state.transform.offsetX = mouseInWrapperX - (mouseInWrapperX - state.transform.offsetX) * (newScale / scale);
-        state.transform.offsetY = mouseInWrapperY - (mouseInWrapperY - state.transform.offsetY) * (newScale / scale);
-        state.transform.scale = newScale; 
+        
+        // Mouse position relative to wrapper
+        const wrapperRect = mainContent.getBoundingClientRect();
+        const mouseX = e.clientX - wrapperRect.left;
+        const mouseY = e.clientY - wrapperRect.top;
+        
+        state.transform.offsetX = mouseX - (mouseX - state.transform.offsetX) * (newScale / scale);
+        state.transform.offsetY = mouseY - (mouseY - state.transform.offsetY) * (newScale / scale);
+        state.transform.scale = newScale;
         render();
     }, { passive: false });
 
-    viewerContainer.addEventListener('pointerdown', e => {
+    mainContent.addEventListener('pointerdown', e => {
         if (!pdfDoc) return;
-        pointerCache.set(e.pointerId, { x: e.clientX, y: e.clientY, lastX: e.clientX, lastY: e.clientY });
+        pointerCache.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        
         const isPen = e.pointerType === 'pen';
-        const isEraser = state.activeTool === 'eraser';
-        if (e.button === 0 && ((state.activeTool === 'draw' || state.activeTool === 'highlight') && isPen) || (isEraser && !isPen && e.pointerType !== 'touch')) {
-            recordHistory();
+        
+        if (state.activeTool === 'pan' || (e.pointerType === 'touch' && !isPen && state.activeTool !== 'pan')) {
+            // Touch always pans unless it's a pen (or if tool is explicitly pan)
+            // Wait, if tool is draw, finger should pan? 
+            // Standard behavior: One finger pan, Pen draws.
+            // Let's enforce: Pen draws if tool != pan. Finger always pans/zooms.
+            if (e.pointerType === 'touch' && state.activeTool !== 'pan') return; 
         }
-        if ((state.activeTool === 'draw' || state.activeTool === 'highlight') && isPen) {
+
+        if (isPen && (state.activeTool === 'draw' || state.activeTool === 'highlight')) {
             state.isDrawing = true;
+            recordHistory();
             const { x, y } = getCanvasCoords(e);
-            const settings = state.toolSettings[state.activeTool];
-            state.currentPath = { type: state.activeTool, points: [{ x, y }], color: settings.color, width: settings.width };
-            if (!annotations[pageNum]) annotations[pageNum] = [];
+            state.currentPath = { type: state.activeTool, points: [{x,y}], color: state.toolSettings[state.activeTool].color, width: state.toolSettings[state.activeTool].width };
+            if(!annotations[pageNum]) annotations[pageNum] = [];
             annotations[pageNum].push(state.currentPath);
-        } else if (isEraser && e.pointerType !== 'touch') {
+        } else if (state.activeTool === 'eraser' && isPen) {
             state.isDrawing = true;
+            recordHistory();
             eraseAtPoint(getCanvasCoords(e));
+        } else if (state.activeTool === 'pan') {
+             // Prepare pan
         }
     });
-    
-    viewerContainer.addEventListener('pointermove', e => {
-        if (!pointerCache.has(e.pointerId)) return; 
-        const currentPointer = pointerCache.get(e.pointerId);
+
+    mainContent.addEventListener('pointermove', e => {
+        if (!pointerCache.has(e.pointerId)) return;
+        const last = pointerCache.get(e.pointerId);
+        
         if (state.isDrawing) {
             const { x, y } = getCanvasCoords(e);
-            if (state.activeTool === 'draw' || state.activeTool === 'highlight') { state.currentPath.points.push({ x, y }); redrawAnnotations(); }
-            else if (state.activeTool === 'eraser') { eraseAtPoint({ x, y }); }
-        } else if (pointerCache.size === 1 && state.activeTool === 'pan') {
-            pdfContainer.classList.add('panning'); 
-            const dx = e.clientX - currentPointer.lastX; 
-            const dy = e.clientY - currentPointer.lastY;
-            state.transform.offsetX += dx; state.transform.offsetY += dy; render();
+            if (state.activeTool === 'eraser') eraseAtPoint({x,y});
+            else { state.currentPath.points.push({x,y}); redrawAnnotations(); }
+        } else if (pointerCache.size === 1) {
+            // Single finger/mouse pan
+            // Only pan if we aren't trying to draw with finger (which we disabled above)
+            // or if tool is Pan
+            const isPen = e.pointerType === 'pen';
+            const shouldPan = state.activeTool === 'pan' || (!isPen && !state.isDrawing);
+            
+            if (shouldPan) {
+                pdfContainer.classList.add('panning');
+                state.transform.offsetX += e.clientX - last.x;
+                state.transform.offsetY += e.clientY - last.y;
+                render();
+            }
         } else if (pointerCache.size === 2) {
-            const pointers = Array.from(pointerCache.values()); 
-            const dist = Math.hypot(pointers[0].x - pointers[1].x, pointers[0].y - pointers[1].y);
+            // PINCH ZOOM
+            const pointers = Array.from(pointerCache.values());
+            const p1 = pointers[0], p2 = pointers[1];
+            // Current pointers are stored in cache, but we need current EVENT coordinates for the moving one
+            // Update the one moving
+            if (e.pointerId === p1.id) { p1.x = e.clientX; p1.y = e.clientY; } // Wait, Map stores objects by ref? No.
+            // We need to update cache every move at end
+            
+            // Re-read current positions from event? No, `last` is old pos. 
+            // We need valid current positions of both fingers.
+            // PointerCache stores the LAST known position.
+            // We need to update the specific pointer that moved.
+            
+            // Find the other pointer
+            let otherId = null;
+            for(let k of pointerCache.keys()) if(k !== e.pointerId) otherId = k;
+            const other = pointerCache.get(otherId);
+            
+            const dist = Math.hypot(e.clientX - other.x, e.clientY - other.y);
+            
             if (prevPinchDist) {
-                const oldScale = state.transform.scale; const newScale = oldScale * (dist / prevPinchDist);
-                const midX = (pointers[0].x + pointers[1].x) / 2;
-                const midY = (pointers[0].y + pointers[1].y) / 2;
-                const wrapperRect = viewerContainer.getBoundingClientRect();
-                const midInWrapperX = midX - wrapperRect.left;
-                const midInWrapperY = midY - wrapperRect.top;
+                const oldScale = state.transform.scale;
+                const newScale = oldScale * (dist / prevPinchDist);
+                const midX = (e.clientX + other.x) / 2;
+                const midY = (e.clientY + other.y) / 2;
+                
+                const rect = mainContent.getBoundingClientRect();
+                const midInWrapperX = midX - rect.left;
+                const midInWrapperY = midY - rect.top;
+                
                 state.transform.offsetX = midInWrapperX - (midInWrapperX - state.transform.offsetX) * (newScale / oldScale);
                 state.transform.offsetY = midInWrapperY - (midInWrapperY - state.transform.offsetY) * (newScale / oldScale);
-                state.transform.scale = newScale; render();
+                state.transform.scale = newScale;
+                render();
             }
             prevPinchDist = dist;
         }
-        currentPointer.lastX = e.clientX; currentPointer.lastY = e.clientY;
-        pointerCache.set(e.pointerId, currentPointer);
+        
+        pointerCache.set(e.pointerId, { x: e.clientX, y: e.clientY });
     });
 
     function handlePointerUp(e) {
-        pointerCache.delete(e.pointerId); if (pointerCache.size < 2) prevPinchDist = null; 
+        pointerCache.delete(e.pointerId);
+        if (pointerCache.size < 2) prevPinchDist = null;
         if (pointerCache.size < 1) pdfContainer.classList.remove('panning');
-        state.isDrawing = false; state.currentPath = null; updateUndoRedoButtons();
+        state.isDrawing = false; state.currentPath = null;
+        updateUndoRedoButtons();
     }
-    
-    viewerContainer.addEventListener('pointerup', handlePointerUp);
-    viewerContainer.addEventListener('pointercancel', handlePointerUp);
-    
-    function eraseAtPoint({ x, y }) {
-        let pageAnnotations = annotations[pageNum] || []; let didErase = false;
-        for (let i = pageAnnotations.length - 1; i >= 0; i--) {
-            const hit = pageAnnotations[i].points.some(p => Math.sqrt(Math.pow(p.x - x, 2) + Math.pow(p.y - y, 2)) < state.toolSettings.eraser.width);
-            if (hit) { pageAnnotations.splice(i, 1); didErase = true; }
-        }
-        if (didErase) redrawAnnotations();
-    }
+    mainContent.addEventListener('pointerup', handlePointerUp);
+    mainContent.addEventListener('pointercancel', handlePointerUp);
+    mainContent.addEventListener('pointerleave', handlePointerUp);
 
-    window.addEventListener('keydown', e => {
-        if(document.activeElement.tagName === 'INPUT') return;
-        if(e.ctrlKey || e.metaKey){ if(e.key.toLowerCase() === 'z') undo(); if(e.key.toLowerCase() === 'y') redo(); return; }
-        const key = e.key.toLowerCase();
-        if(key === 'arrowleft') goToPrevPage(); if(key === 'arrowright') goToNextPage();
-        if(key === 'f') fitToScreen(); if(key === 'm') setActiveTool('pan'); 
-        if(key === 'p') setActiveTool('draw'); if(key === 'h') setActiveTool('highlight'); if(key === 'e') setActiveTool('eraser');
-    });
-
-    downloadBtn.addEventListener('click', async () => {
-        if (!pdfDoc || !originalPdfBytes) return; loadingOverlay.style.display = 'flex';
-        const { PDFDocument } = PDFLib; const pdfDocToModify = await PDFDocument.load(originalPdfBytes);
-        const renderScale = 1.5;
-        for (const pageNumKey in annotations) {
-            const pageIndex = parseInt(pageNumKey) - 1; if (pageIndex >= pdfDocToModify.getPageCount()) continue;
-            const page = pdfDocToModify.getPages()[pageIndex]; const { width, height } = page.getSize();
-            let svgPaths = (annotations[pageNumKey] || []).map(anno => {
-                const d = anno.points.map((p, i) => {
-                    const pdfX = p.x / renderScale;
-                    const pdfY = height - (p.y / renderScale); 
-                    return (i === 0 ? 'M' : 'L') + `${pdfX.toFixed(2)} ${pdfY.toFixed(2)}`;
-                }).join(' ');
-                const opacity = anno.type === 'highlight' ? '0.4' : '1.0';
-                const strokeWidth = anno.width / renderScale;
-                return `<path d="${d}" stroke="${anno.color}" stroke-width="${strokeWidth}" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${opacity}" />`;
-            }).join('');
-            if(svgPaths) {
-                const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">${svgPaths}</svg>`;
-                page.drawSvg(await pdfDocToModify.embedSvg(svg), { x: 0, y: 0, width, height });
+    // --- UTILS ---
+    function eraseAtPoint({x,y}) {
+        const arr = annotations[pageNum] || [];
+        for(let i=arr.length-1; i>=0; i--) {
+            if(arr[i].points.some(p => Math.hypot(p.x-x, p.y-y) < state.toolSettings.eraser.width)) {
+                arr.splice(i,1); redrawAnnotations(); break; 
             }
         }
-        const pdfBytes = await pdfDocToModify.save(); const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-        const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'annotated_copy.pdf';
-        link.click(); loadingOverlay.style.display = 'none';
-    });
-
-    async function init() {
-        await openDB();
-        setActiveTool('pan');
-        window.addEventListener('resize', fitToScreen);
     }
-    init();
+    function recordHistory() {
+        if(!history[pageNum]) history[pageNum]=[];
+        history[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum]||[])));
+        redoStack[pageNum]=[];
+    }
+    undoBtn.onclick = () => {
+        if(history[pageNum]?.length) {
+            redoStack[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum])));
+            annotations[pageNum] = history[pageNum].pop(); redrawAnnotations(); updateUndoRedoButtons();
+        }
+    }
+    redoBtn.onclick = () => {
+        if(redoStack[pageNum]?.length) {
+            history[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum])));
+            annotations[pageNum] = redoStack[pageNum].pop(); redrawAnnotations(); updateUndoRedoButtons();
+        }
+    }
+    function updateUndoRedoButtons(){
+        undoBtn.disabled = !history[pageNum]?.length; redoBtn.disabled = !redoStack[pageNum]?.length;
+    }
+    function updatePageNavButtons(){
+        prevPageOverlay.classList.toggle('disabled', pageNum<=1);
+        nextPageOverlay.classList.toggle('disabled', pageNum>=pdfDoc.numPages);
+    }
+    prevPageOverlay.onclick = () => {if(pageNum>1){pageNum--; render();}};
+    nextPageOverlay.onclick = () => {if(pageNum<pdfDoc.numPages){pageNum++; render();}};
+    document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.onclick = () => {
+        document.querySelector('.tool-btn.active')?.classList.remove('active');
+        b.classList.add('active');
+        state.activeTool = b.dataset.tool;
+        pdfContainer.dataset.tool = state.activeTool;
+        // Tool properties
+        const t = state.activeTool;
+        toolPropertiesContainer.innerHTML = '';
+        if(t==='draw'||t==='highlight'){
+            toolPropertiesContainer.innerHTML = `<input type="color" id="tc" value="${state.toolSettings[t].color}"><input type="range" id="tw" min="1" max="40" value="${state.toolSettings[t].width}">`;
+            getEl('tc').oninput=e=>state.toolSettings[t].color=e.target.value;
+            getEl('tw').oninput=e=>state.toolSettings[t].width=e.target.value;
+        }
+    });
+    document.getElementById('reset-view-btn').onclick = fitToScreen;
+    
+    // --- INIT ---
+    openDB().then(() => {
+        setActiveTool('pan');
+        // Pre-select pan button
+        document.querySelector('[data-tool="pan"]').classList.add('active');
+        refreshDock();
+    });
+    window.addEventListener('resize', fitToScreen);
+    
+    function setActiveTool(t) { state.activeTool = t; pdfContainer.dataset.tool = t; }
+
     </script>
 </body>
 </html>
