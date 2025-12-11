@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Local PDF Editor - Fixed Coordinates</title>
+    <title>Local PDF Editor - Fixed</title>
     
     <style>
         /* General Setup */
@@ -15,7 +15,7 @@
             margin: 0; padding: 0; height: 100%; width: 100%;
             overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg-light); color: var(--text-light);
-            touch-action: none; /* Critical for tablet: prevents browser pinch/scroll */
+            touch-action: none; /* Critical for tablet */
         }
 
         /* App Layout */
@@ -61,7 +61,7 @@
             position: absolute; 
             box-shadow: 0 0 20px rgba(0,0,0,0.5);
             touch-action: none;
-            /* CRITICAL FIX 1: Transform origin must be top-left for the math to work */
+            /* CRITICAL FIX: Transform origin must be top-left */
             transform-origin: 0 0; 
             will-change: transform;
         }
@@ -103,9 +103,12 @@
         #file-list .file-actions button:hover { background-color: var(--accent); }
         .modal-close { float: right; cursor: pointer; font-size: 24px; }
 
+        /* LOADING OVERLAY - FIX: Hidden by default */
         #loading-overlay { 
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 9999; 
+            background: rgba(0,0,0,0.5); 
+            display: none; /* <--- FIXED HERE */
+            justify-content: center; align-items: center; z-index: 9999; 
         }
         .spinner { width: 50px; height: 50px; border: 5px solid var(--bg-light); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -162,12 +165,13 @@
     
     <div id="loading-overlay"><div class="spinner"></div></div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+    <script src="https://unpkg.com/pdfjs-dist@2.16.105/build/pdf.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 
     <script>
     // --- SETUP & DOM ELEMENTS ---
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.worker.min.js`;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@2.16.105/build/pdf.worker.min.js`;
+    
     const getEl = id => document.getElementById(id);
     const uploadInput = getEl('pdf-upload'), uploadBtn = getEl('upload-btn'), saveBtn = getEl('save-btn');
     const pdfCanvas = getEl('pdf-canvas'), annotationCanvas = getEl('annotation-canvas');
@@ -183,6 +187,7 @@
     let pdfDoc = null, originalPdfBytes = null, pageNum = 1, currentFileId = null;
     let annotations = {};
     let history = {}, redoStack = {};
+    let isDbReady = false;
     
     const state = {
         transform: { scale: 1, offsetX: 0, offsetY: 0 },
@@ -198,14 +203,22 @@
     let db;
     function openDB() {
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open(DB_NAME, DB_VERSION);
-            request.onerror = () => reject("Error opening database");
-            request.onsuccess = () => { db = request.result; resolve(db); };
-            request.onupgradeneeded = e => {
-                const db = e.target.result;
-                db.createObjectStore('files', { keyPath: 'id' });
-                db.createObjectStore('annotations', { keyPath: 'fileId' });
-            };
+            try {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onerror = () => { 
+                    console.warn("Database blocked or failed."); 
+                    resolve(null); // Resolve null to allow app to continue without DB
+                };
+                request.onsuccess = () => { db = request.result; isDbReady = true; resolve(db); };
+                request.onupgradeneeded = e => {
+                    const db = e.target.result;
+                    db.createObjectStore('files', { keyPath: 'id' });
+                    db.createObjectStore('annotations', { keyPath: 'fileId' });
+                };
+            } catch(e) {
+                console.warn("IndexedDB not available");
+                resolve(null);
+            }
         });
     }
 
@@ -215,25 +228,23 @@
         loadingOverlay.style.display = 'flex';
         
         pdfDoc.getPage(pageNum).then(page => {
-            // CRITICAL FIX 3: Higher scale for cleaner text on Xiaomi Tablet
-            const scaleFactor = 1.5; 
+            const scaleFactor = 1.5; // High resolution render
             const pdfViewport = page.getViewport({ scale: scaleFactor });
             
-            // Set CSS dimensions
             pdfContainer.style.width = `${pdfViewport.width}px`;
             pdfContainer.style.height = `${pdfViewport.height}px`;
-            
-            // Set Canvas Dimensions (Resolution)
             pdfCanvas.width = pdfViewport.width; 
             pdfCanvas.height = pdfViewport.height;
             annotationCanvas.width = pdfViewport.width; 
             annotationCanvas.height = pdfViewport.height;
 
-            // Apply Transform
             pdfContainer.style.transform = `translate(${state.transform.offsetX}px, ${state.transform.offsetY}px) scale(${state.transform.scale})`;
             
             page.render({ canvasContext: pdfCtx, viewport: pdfViewport }).promise.then(() => {
                 redrawAnnotations();
+                loadingOverlay.style.display = 'none';
+            }).catch(e => {
+                console.error("Render Error:", e);
                 loadingOverlay.style.display = 'none';
             });
         });
@@ -260,77 +271,51 @@
     
     function fitToScreen() {
         if (!pdfDoc) return;
-        // Reset scale but keep offset to 0
         pdfDoc.getPage(pageNum).then(page => {
-            // Match the scale used in render()
             const viewport = page.getViewport({ scale: 1.5 });
-            
-            // Calculate scale to fit container
             const containerW = viewerContainer.clientWidth;
             const containerH = viewerContainer.clientHeight;
-            
-            // Scale based on the Canvas size vs Container size
-            const scale = Math.min(
-                (containerW / viewport.width) * 0.95, 
-                (containerH / viewport.height) * 0.95
-            );
-            
-            // Center the PDF in the viewport
+            const scale = Math.min((containerW / viewport.width) * 0.95, (containerH / viewport.height) * 0.95);
             const offsetX = (containerW - (viewport.width * scale)) / 2;
             const offsetY = (containerH - (viewport.height * scale)) / 2;
-
             state.transform = { scale, offsetX, offsetY };
             render();
         });
     }
 
-    // --- UNDO/REDO LOGIC ---
+    // --- UNDO/REDO & HISTORY ---
     function recordHistory() {
         if (!history[pageNum]) history[pageNum] = [];
         history[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum] || [])));
         redoStack[pageNum] = [];
         updateUndoRedoButtons();
     }
-    
     function undo() {
         if (!history[pageNum] || history[pageNum].length === 0) return;
         if (!redoStack[pageNum]) redoStack[pageNum] = [];
-        
-        // Push current state to redo
         redoStack[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum] || [])));
-        
-        // Pop previous state
-        const prevState = history[pageNum].pop();
-        annotations[pageNum] = prevState;
-        
+        annotations[pageNum] = history[pageNum].pop();
         redrawAnnotations();
         updateUndoRedoButtons();
     }
-
     function redo() {
         if (!redoStack[pageNum] || redoStack[pageNum].length === 0) return;
-        
-        // Push current to history
-        recordHistoryWithoutClearingRedo(); 
-        
-        const nextState = redoStack[pageNum].pop();
-        annotations[pageNum] = nextState;
-        
+        if (!history[pageNum]) history[pageNum] = [];
+        history[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum] || [])));
+        annotations[pageNum] = redoStack[pageNum].pop();
         redrawAnnotations();
         updateUndoRedoButtons();
     }
-    
-    function recordHistoryWithoutClearingRedo() {
-        if (!history[pageNum]) history[pageNum] = [];
-        history[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum] || [])));
-    }
-
     function updateUndoRedoButtons() {
         undoBtn.disabled = !history[pageNum] || history[pageNum].length === 0;
         redoBtn.disabled = !redoStack[pageNum] || redoStack[pageNum].length === 0;
     }
+    function updatePageNavButtons() {
+        prevPageOverlay.classList.toggle('disabled', pageNum <= 1);
+        nextPageOverlay.classList.toggle('disabled', pageNum >= pdfDoc.numPages);
+    }
 
-    // --- FILE MANAGEMENT ---
+    // --- FILE I/O ---
     async function loadFile(id, fileData, annotationData) {
         currentFileId = id;
         originalPdfBytes = fileData;
@@ -355,6 +340,7 @@
 
     saveBtn.addEventListener('click', async () => {
         if (!pdfDoc) return;
+        if (!isDbReady) { alert("Local saving is disabled (Database unavailable). Use Download."); return; }
         loadingOverlay.style.display = 'flex';
         let fileId = currentFileId;
         if (!fileId) {
@@ -377,6 +363,7 @@
     });
     
     filesBtn.addEventListener('click', async () => {
+        if (!isDbReady) { alert("Local storage is unavailable."); return; }
         const tx = db.transaction('files', 'readonly');
         const allFiles = await tx.objectStore('files').getAll();
         fileList.innerHTML = '';
@@ -391,7 +378,7 @@
         }
         filesModal.style.display = 'flex';
     });
-
+    
     fileList.addEventListener('click', async e => {
         const id = parseInt(e.target.dataset.id);
         if (e.target.classList.contains('open-file')) {
@@ -416,7 +403,7 @@
 
     getEl('files-modal-close').addEventListener('click', () => filesModal.style.display = 'none');
     
-    // --- EVENT LISTENERS & TOOLS ---
+    // --- TOOL ACTIONS ---
     document.getElementById('reset-view-btn').addEventListener('click', fitToScreen);
     document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => btn.addEventListener('click', () => setActiveTool(btn.dataset.tool)));
     prevPageOverlay.addEventListener('click', () => { if (pageNum > 1) { pageNum--; render(); }});
@@ -441,29 +428,18 @@
             getEl('tool-width').oninput = e => { settings.width = e.target.value; getEl('stroke-width-label').textContent = e.target.value; };
         }
     }
-
+    
     function goToPrevPage() { if (pageNum > 1) { pageNum--; render(); } }
     function goToNextPage() { if (pageNum < pdfDoc.numPages) { pageNum++; render(); } }
 
-    // --- COORDINATE & ZOOM LOGIC ---
-    
-    // CRITICAL FIX 2: Correct Coordinate Mapping for Scale
-    // This calculates the ratio between the visual screen pixels and the internal canvas pixels
+    // --- COORDINATE MAPPING & POINTER EVENTS ---
     function getCanvasCoords(e) {
         const rect = annotationCanvas.getBoundingClientRect();
-        
-        // Visual coordinates relative to the canvas element on screen
         const visualX = e.clientX - rect.left;
         const visualY = e.clientY - rect.top;
-
-        // Scaling factor (Internal Pixels / Visual Pixels)
         const scaleX = annotationCanvas.width / rect.width;
         const scaleY = annotationCanvas.height / rect.height;
-
-        return { 
-            x: visualX * scaleX, 
-            y: visualY * scaleY 
-        };
+        return { x: visualX * scaleX, y: visualY * scaleY };
     }
 
     viewerContainer.addEventListener('wheel', e => {
@@ -471,22 +447,11 @@
         const rect = pdfContainer.getBoundingClientRect(); 
         const { scale } = state.transform; 
         const newScale = e.deltaY < 0 ? scale * 1.1 : scale / 1.1;
-        
-        // Zoom towards mouse position
-        // Because transform-origin is 0 0, we must adjust offsetX/Y manually
-        const mouseX = e.clientX - rect.left; // Mouse Pos inside element
-        const mouseY = e.clientY - rect.top;
-
-        // Formula changes slightly because we are panning the container's TopLeft relative to Wrapper
-        // We need the mouse position relative to the Wrapper
         const wrapperRect = viewerContainer.getBoundingClientRect();
         const mouseInWrapperX = e.clientX - wrapperRect.left;
         const mouseInWrapperY = e.clientY - wrapperRect.top;
-
-        // Calculate new offsets to keep mouse point stable
         state.transform.offsetX = mouseInWrapperX - (mouseInWrapperX - state.transform.offsetX) * (newScale / scale);
         state.transform.offsetY = mouseInWrapperY - (mouseInWrapperY - state.transform.offsetY) * (newScale / scale);
-        
         state.transform.scale = newScale; 
         render();
     }, { passive: false });
@@ -494,15 +459,11 @@
     viewerContainer.addEventListener('pointerdown', e => {
         if (!pdfDoc) return;
         pointerCache.set(e.pointerId, { x: e.clientX, y: e.clientY, lastX: e.clientX, lastY: e.clientY });
-        
         const isPen = e.pointerType === 'pen';
         const isEraser = state.activeTool === 'eraser';
-
-        // History recording
         if (e.button === 0 && ((state.activeTool === 'draw' || state.activeTool === 'highlight') && isPen) || (isEraser && !isPen && e.pointerType !== 'touch')) {
             recordHistory();
         }
-
         if ((state.activeTool === 'draw' || state.activeTool === 'highlight') && isPen) {
             state.isDrawing = true;
             const { x, y } = getCanvasCoords(e);
@@ -519,58 +480,39 @@
     viewerContainer.addEventListener('pointermove', e => {
         if (!pointerCache.has(e.pointerId)) return; 
         const currentPointer = pointerCache.get(e.pointerId);
-        
         if (state.isDrawing) {
             const { x, y } = getCanvasCoords(e);
-            if (state.activeTool === 'draw' || state.activeTool === 'highlight') { 
-                state.currentPath.points.push({ x, y }); 
-                redrawAnnotations(); 
-            } else if (state.activeTool === 'eraser') { 
-                eraseAtPoint({ x, y }); 
-            }
+            if (state.activeTool === 'draw' || state.activeTool === 'highlight') { state.currentPath.points.push({ x, y }); redrawAnnotations(); }
+            else if (state.activeTool === 'eraser') { eraseAtPoint({ x, y }); }
         } else if (pointerCache.size === 1 && state.activeTool === 'pan') {
             pdfContainer.classList.add('panning'); 
             const dx = e.clientX - currentPointer.lastX; 
             const dy = e.clientY - currentPointer.lastY;
-            state.transform.offsetX += dx; 
-            state.transform.offsetY += dy; 
-            render();
+            state.transform.offsetX += dx; state.transform.offsetY += dy; render();
         } else if (pointerCache.size === 2) {
-            // Pinch to Zoom
             const pointers = Array.from(pointerCache.values()); 
             const dist = Math.hypot(pointers[0].x - pointers[1].x, pointers[0].y - pointers[1].y);
-            const midX = (pointers[0].x + pointers[1].x) / 2;
-            const midY = (pointers[0].y + pointers[1].y) / 2;
-            
             if (prevPinchDist) {
-                const oldScale = state.transform.scale; 
-                const newScale = oldScale * (dist / prevPinchDist);
-                
-                // Adjust offsets to zoom into center of pinch
+                const oldScale = state.transform.scale; const newScale = oldScale * (dist / prevPinchDist);
+                const midX = (pointers[0].x + pointers[1].x) / 2;
+                const midY = (pointers[0].y + pointers[1].y) / 2;
                 const wrapperRect = viewerContainer.getBoundingClientRect();
                 const midInWrapperX = midX - wrapperRect.left;
                 const midInWrapperY = midY - wrapperRect.top;
-
                 state.transform.offsetX = midInWrapperX - (midInWrapperX - state.transform.offsetX) * (newScale / oldScale);
                 state.transform.offsetY = midInWrapperY - (midInWrapperY - state.transform.offsetY) * (newScale / oldScale);
-                
-                state.transform.scale = newScale; 
-                render();
+                state.transform.scale = newScale; render();
             }
             prevPinchDist = dist;
         }
-        currentPointer.lastX = e.clientX; 
-        currentPointer.lastY = e.clientY;
+        currentPointer.lastX = e.clientX; currentPointer.lastY = e.clientY;
         pointerCache.set(e.pointerId, currentPointer);
     });
 
     function handlePointerUp(e) {
-        pointerCache.delete(e.pointerId); 
-        if (pointerCache.size < 2) prevPinchDist = null; 
+        pointerCache.delete(e.pointerId); if (pointerCache.size < 2) prevPinchDist = null; 
         if (pointerCache.size < 1) pdfContainer.classList.remove('panning');
-        state.isDrawing = false; 
-        state.currentPath = null; 
-        updateUndoRedoButtons();
+        state.isDrawing = false; state.currentPath = null; updateUndoRedoButtons();
     }
     
     viewerContainer.addEventListener('pointerup', handlePointerUp);
@@ -578,7 +520,6 @@
     
     function eraseAtPoint({ x, y }) {
         let pageAnnotations = annotations[pageNum] || []; let didErase = false;
-        // Search backwards to erase top-most items first
         for (let i = pageAnnotations.length - 1; i >= 0; i--) {
             const hit = pageAnnotations[i].points.some(p => Math.sqrt(Math.pow(p.x - x, 2) + Math.pow(p.y - y, 2)) < state.toolSettings.eraser.width);
             if (hit) { pageAnnotations.splice(i, 1); didErase = true; }
@@ -590,68 +531,38 @@
         if(document.activeElement.tagName === 'INPUT') return;
         if(e.ctrlKey || e.metaKey){ if(e.key.toLowerCase() === 'z') undo(); if(e.key.toLowerCase() === 'y') redo(); return; }
         const key = e.key.toLowerCase();
-        if(key === 'arrowleft') goToPrevPage(); 
-        if(key === 'arrowright') goToNextPage();
-        if(key === 'f') fitToScreen(); 
-        if(key === 'm') setActiveTool('pan'); 
-        if(key === 'p') setActiveTool('draw');
-        if(key === 'h') setActiveTool('highlight'); 
-        if(key === 'e') setActiveTool('eraser');
+        if(key === 'arrowleft') goToPrevPage(); if(key === 'arrowright') goToNextPage();
+        if(key === 'f') fitToScreen(); if(key === 'm') setActiveTool('pan'); 
+        if(key === 'p') setActiveTool('draw'); if(key === 'h') setActiveTool('highlight'); if(key === 'e') setActiveTool('eraser');
     });
 
     downloadBtn.addEventListener('click', async () => {
-        if (!pdfDoc || !originalPdfBytes) return; 
-        loadingOverlay.style.display = 'flex';
-        const { PDFDocument } = PDFLib; 
-        const pdfDocToModify = await PDFDocument.load(originalPdfBytes);
-        
+        if (!pdfDoc || !originalPdfBytes) return; loadingOverlay.style.display = 'flex';
+        const { PDFDocument } = PDFLib; const pdfDocToModify = await PDFDocument.load(originalPdfBytes);
+        const renderScale = 1.5;
         for (const pageNumKey in annotations) {
-            const pageIndex = parseInt(pageNumKey) - 1; 
-            if (pageIndex >= pdfDocToModify.getPageCount()) continue;
-            
-            const page = pdfDocToModify.getPages()[pageIndex]; 
-            const { width, height } = page.getSize();
-            
-            // NOTE: PDF-Lib uses bottom-left (0,0), Canvas uses top-left (0,0)
-            // We must flip Y. Since we render at 1.5x scale in UI, we must also scale down coords.
-            // However, the annotation coordinates stored are based on the Canvas Size.
-            // The Canvas Size was set to Viewport size (1.5x original PDF size).
-            // So we need to scale coordinates DOWN by 1.5 to match PDF points.
-            
-            // We access the scale used during rendering (hardcoded to 1.5 in render())
-            const renderScale = 1.5;
-
+            const pageIndex = parseInt(pageNumKey) - 1; if (pageIndex >= pdfDocToModify.getPageCount()) continue;
+            const page = pdfDocToModify.getPages()[pageIndex]; const { width, height } = page.getSize();
             let svgPaths = (annotations[pageNumKey] || []).map(anno => {
                 const d = anno.points.map((p, i) => {
-                    // Convert Canvas Coord to PDF Coord
                     const pdfX = p.x / renderScale;
                     const pdfY = height - (p.y / renderScale); 
                     return (i === 0 ? 'M' : 'L') + `${pdfX.toFixed(2)} ${pdfY.toFixed(2)}`;
                 }).join(' ');
-                
                 const opacity = anno.type === 'highlight' ? '0.4' : '1.0';
-                // Stroke width also needs scaling down
                 const strokeWidth = anno.width / renderScale;
-
                 return `<path d="${d}" stroke="${anno.color}" stroke-width="${strokeWidth}" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${opacity}" />`;
             }).join('');
-            
             if(svgPaths) {
                 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">${svgPaths}</svg>`;
                 page.drawSvg(await pdfDocToModify.embedSvg(svg), { x: 0, y: 0, width, height });
             }
         }
-        
-        const pdfBytes = await pdfDocToModify.save(); 
-        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-        const link = document.createElement('a'); 
-        link.href = URL.createObjectURL(blob); 
-        link.download = 'annotated_copy.pdf';
-        link.click(); 
-        loadingOverlay.style.display = 'none';
+        const pdfBytes = await pdfDocToModify.save(); const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+        const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'annotated_copy.pdf';
+        link.click(); loadingOverlay.style.display = 'none';
     });
 
-    // --- INITIALIZATION ---
     async function init() {
         await openDB();
         setActiveTool('pan');
