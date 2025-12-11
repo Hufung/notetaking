@@ -1,9 +1,10 @@
+<!-- START OF FILE index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PDF Editor with File Dock</title>
+    <title>PDF Editor Pro</title>
     
     <style>
         /* --- THEME & RESET --- */
@@ -44,6 +45,10 @@
         #tool-properties { display: flex; align-items: center; gap: 10px; padding-left: 10px; border-left: 1px solid #444; }
         input[type="color"] { border: none; width: 24px; height: 24px; padding: 0; background: none; cursor: pointer; }
         input[type="range"] { width: 80px; cursor: pointer; }
+        
+        .zoom-indicator {
+            font-size: 13px; font-weight: bold; color: var(--accent); min-width: 45px; text-align: right;
+        }
 
         /* --- MAIN VIEWPORT --- */
         .main-content { 
@@ -60,6 +65,9 @@
         }
         #pdf-viewer-container[data-tool="pan"] { cursor: grab; }
         #pdf-viewer-container[data-tool="pan"].panning { cursor: grabbing; }
+        #pdf-viewer-container[data-tool="link"] { cursor: crosshair; }
+        
+        /* Canvas Layers */
         #pdf-canvas, #annotation-canvas { position: absolute; top: 0; left: 0; pointer-events: none; }
         
         /* Page Nav */
@@ -143,7 +151,7 @@
         <div class="toolbar">
             <div class="toolbar-section">
                 <!-- NEW FILE TAB BUTTON -->
-                <button class="tool-btn file-tab-btn" id="files-toggle-btn" title="Open File Docker">
+                <button class="tool-btn file-tab-btn" id="files-toggle-btn" title="Open File Dock">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
                     Files
                 </button>
@@ -160,12 +168,25 @@
             </div>
 
             <div class="toolbar-section">
-                <button class="tool-btn" data-tool="pan" title="Pan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg></button>
+                <button class="tool-btn" data-tool="pan" title="Pan / Click Links"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg></button>
                 <button class="tool-btn" data-tool="draw" title="Pen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg></button>
+                
+                <!-- NEW STRAIGHT LINE TOOL -->
+                <button class="tool-btn" data-tool="line" title="Straight Line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="4" y1="20" x2="20" y2="4"></line></svg></button>
+                
                 <button class="tool-btn" data-tool="highlight" title="Marker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg></button>
+                
+                <!-- NEW LINK TOOL -->
+                <button class="tool-btn" data-tool="link" title="Insert Link URL"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></button>
+
                 <button class="tool-btn" data-tool="eraser" title="Eraser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+                
                 <div id="tool-properties"></div>
+                
                 <button class="tool-btn" id="reset-view-btn" title="Fit View"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 3h6v6"></path><path d="M9 21H3v-6"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path></svg></button>
+                
+                <!-- NEW ZOOM INDICATOR -->
+                <span id="zoom-indicator" class="zoom-indicator">100%</span>
             </div>
         </div>
         
@@ -207,6 +228,7 @@
     const pdfCtx = pdfCanvas.getContext('2d'), annotationCtx = annotationCanvas.getContext('2d');
     const pdfContainer = getEl('pdf-viewer-container');
     const dockWrapper = getEl('dock-wrapper'), dockContent = getEl('dock-content');
+    const zoomIndicator = getEl('zoom-indicator');
     
     // Buttons
     const filesToggleBtn = getEl('files-toggle-btn'), closeDockBtn = getEl('close-dock');
@@ -223,9 +245,16 @@
     
     const state = {
         transform: { scale: 1, offsetX: 0, offsetY: 0 },
-        isDrawing: false, currentPath: null,
+        isDrawing: false, 
+        currentPath: null,
         activeTool: 'pan',
-        toolSettings: { draw: { color: '#ff0000', width: 3 }, highlight: { color: '#ffff00', width: 20 }, eraser: { width: 20 } }
+        toolSettings: { 
+            draw: { color: '#ff0000', width: 3 }, 
+            line: { color: '#ff0000', width: 3 }, // New Line settings
+            highlight: { color: '#ffff00', width: 20 }, 
+            eraser: { width: 20 },
+            link: { color: '#5865f2' } // New Link settings
+        }
     };
     const pointerCache = new Map();
     let prevPinchDist = null;
@@ -319,6 +348,9 @@
 
             pdfContainer.style.transform = `translate(${state.transform.offsetX}px, ${state.transform.offsetY}px) scale(${state.transform.scale})`;
             
+            // 1. Zoom Indicator Update
+            zoomIndicator.textContent = Math.round(state.transform.scale * 100) + '%';
+            
             page.render({ canvasContext: pdfCtx, viewport: viewport }).promise.then(() => {
                 redrawAnnotations();
             });
@@ -329,15 +361,49 @@
     
     function redrawAnnotations() {
         annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
-        (annotations[pageNum] || []).forEach(anno => {
-            annotationCtx.beginPath();
-            annotationCtx.moveTo(anno.points[0].x, anno.points[0].y);
-            anno.points.forEach(p => annotationCtx.lineTo(p.x, p.y));
-            if (anno.type === 'highlight') annotationCtx.globalAlpha = 0.4;
-            annotationCtx.strokeStyle = anno.color;
-            annotationCtx.lineWidth = anno.width;
-            annotationCtx.lineCap = 'round'; annotationCtx.lineJoin = 'round';
-            annotationCtx.stroke(); annotationCtx.globalAlpha = 1.0;
+        
+        const listToDraw = [...(annotations[pageNum] || [])];
+        // If we are currently drawing a line or link, add temp path to list
+        if (state.isDrawing && state.currentPath && (state.activeTool === 'line' || state.activeTool === 'link')) {
+            listToDraw.push(state.currentPath);
+        }
+
+        listToDraw.forEach(anno => {
+            annotationCtx.save();
+            if (anno.type === 'link') {
+                // Draw Link Rectangle
+                annotationCtx.fillStyle = 'rgba(88, 101, 242, 0.2)';
+                annotationCtx.strokeStyle = 'rgba(88, 101, 242, 0.8)';
+                annotationCtx.lineWidth = 2;
+                annotationCtx.fillRect(anno.x, anno.y, anno.w, anno.h);
+                annotationCtx.strokeRect(anno.x, anno.y, anno.w, anno.h);
+                
+                // Draw Link Icon
+                annotationCtx.fillStyle = '#fff';
+                annotationCtx.font = '12px sans-serif';
+                annotationCtx.fillText("🔗", anno.x + 4, anno.y + 16);
+            } else {
+                // Draw Paths (Pen, Highlight, Line)
+                annotationCtx.beginPath();
+                annotationCtx.moveTo(anno.points[0].x, anno.points[0].y);
+                
+                if (anno.type === 'line') {
+                   // Straight line just connects start to end
+                   const end = anno.points[1] || anno.points[0];
+                   annotationCtx.lineTo(end.x, end.y);
+                } else {
+                    // Freehand
+                    anno.points.forEach(p => annotationCtx.lineTo(p.x, p.y));
+                }
+
+                if (anno.type === 'highlight') annotationCtx.globalAlpha = 0.4;
+                annotationCtx.strokeStyle = anno.color;
+                annotationCtx.lineWidth = anno.width;
+                annotationCtx.lineCap = 'round'; 
+                annotationCtx.lineJoin = 'round';
+                annotationCtx.stroke(); 
+            }
+            annotationCtx.restore();
         });
     }
     
@@ -364,7 +430,6 @@
         document.title = name || "PDF Editor";
         fitToScreen();
         [saveBtn, downloadBtn, undoBtn, redoBtn].forEach(b => b.disabled = false);
-        // If save button was disabled (new file), enable it
         saveBtn.disabled = false;
         downloadBtn.disabled = false;
         updateUndoRedoButtons();
@@ -380,18 +445,14 @@
 
     saveBtn.onclick = async () => {
         if (!pdfDoc || !isDbReady) return;
-        
         let fileId = currentFileId;
         let fileName = document.title;
-
         if (!fileId) {
             fileName = prompt("File Name:", fileName.replace('*', ''));
             if (!fileName) return;
             fileId = Date.now();
         }
-
         getEl('loading-overlay').style.display = 'flex';
-
         // 1. Capture Thumbnail
         const thumbCvs = document.createElement('canvas');
         const thumbSize = 120;
@@ -404,10 +465,8 @@
         tCtx.drawImage(annotationCanvas, 0,0,thumbCvs.width,thumbCvs.height);
         const thumbnailData = thumbCvs.toDataURL('image/jpeg', 0.6);
 
-        // 2. Save
         const fileData = { id: fileId, name: fileName, data: originalPdfBytes, thumbnail: thumbnailData };
         const annoData = { fileId, data: annotations };
-        
         const tx = db.transaction(['files', 'annotations'], 'readwrite');
         tx.objectStore('files').put(fileData);
         tx.objectStore('annotations').put(annoData);
@@ -416,11 +475,8 @@
         currentFileId = fileId;
         document.title = fileName;
         getEl('loading-overlay').style.display = 'none';
-        
-        // Refresh dock if open
         if(dockWrapper.classList.contains('open')) refreshDock();
         else {
-            // Optional: Blink Files button to show success?
             const originalText = filesToggleBtn.innerHTML;
             filesToggleBtn.innerHTML = "✓ Saved";
             setTimeout(() => filesToggleBtn.innerHTML = originalText, 1500);
@@ -430,7 +486,7 @@
     downloadBtn.onclick = async () => {
         if (!pdfDoc) return;
         getEl('loading-overlay').style.display = 'flex';
-        const { PDFDocument } = PDFLib; 
+        const { PDFDocument, rgb } = PDFLib; 
         const pdfDocToModify = await PDFDocument.load(originalPdfBytes);
         const renderScale = 1.5;
         
@@ -440,18 +496,42 @@
             const page = pdfDocToModify.getPages()[idx];
             const { width, height } = page.getSize();
             
-            let paths = (annotations[pn]||[]).map(a => {
+            // Draw standard paths (lines/draw/highlight)
+            let paths = (annotations[pn]||[]).filter(a => a.type !== 'link').map(a => {
                 const d = a.points.map((p,i) => {
                     const x = p.x / renderScale;
                     const y = height - (p.y / renderScale);
                     return (i===0?'M':'L')+`${x.toFixed(2)} ${y.toFixed(2)}`;
                 }).join(' ');
+                
+                // For lines, ensure we close path or just draw line
                 return `<path d="${d}" stroke="${a.color}" stroke-width="${a.width/renderScale}" fill="none" stroke-opacity="${a.type==='highlight'?0.4:1}" stroke-linecap="round" stroke-linejoin="round"/>`;
             }).join('');
             
             if(paths) {
                 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">${paths}</svg>`;
                 page.drawSvg(await pdfDocToModify.embedSvg(svg), {x:0, y:0, width, height});
+            }
+
+            // Draw Links visually
+            const links = (annotations[pn]||[]).filter(a => a.type === 'link');
+            for (const l of links) {
+                const x = l.x / renderScale;
+                // PDF coordinates are bottom-up
+                const y = height - ((l.y + l.h) / renderScale);
+                const w = l.w / renderScale;
+                const h = l.h / renderScale;
+                
+                // Draw a blue box with the URL text so it's visible in export
+                page.drawRectangle({
+                    x, y, width: w, height: h,
+                    color: rgb(0.3, 0.4, 0.9), opacity: 0.2,
+                    borderColor: rgb(0.3, 0.4, 0.9), borderWidth: 1
+                });
+                page.drawText('LINK: ' + l.url, {
+                    x: x, y: y + h + 2,
+                    size: 8, color: rgb(0,0,0)
+                });
             }
         }
         const bytes = await pdfDocToModify.save();
@@ -488,15 +568,39 @@
         if (!pdfDoc) return;
         pointerCache.set(e.pointerId, { x: e.clientX, y: e.clientY });
         const isPen = e.pointerType === 'pen';
+        const coords = getCanvasCoords(e);
         
-        if (state.activeTool !== 'pan' && isPen) {
-            // Draw
+        // 3. CHECK CLICK ON LINKS (Only in Pan Mode)
+        if (state.activeTool === 'pan' && !isPen) {
+            const links = (annotations[pageNum] || []).filter(a => a.type === 'link');
+            for (const l of links) {
+                if (coords.x >= l.x && coords.x <= l.x + l.w && coords.y >= l.y && coords.y <= l.y + l.h) {
+                    let url = l.url;
+                    if(!url.startsWith('http')) url = 'https://' + url;
+                    window.open(url, '_blank');
+                    return; // Don't pan if we clicked a link
+                }
+            }
+        }
+
+        if (state.activeTool !== 'pan' && (isPen || state.activeTool !== 'pan')) {
             state.isDrawing = true;
-            recordHistory();
-            const { x, y } = getCanvasCoords(e);
-            if (state.activeTool === 'eraser') eraseAtPoint({x,y});
-            else {
-                state.currentPath = { type: state.activeTool, points: [{x,y}], color: state.toolSettings[state.activeTool].color, width: state.toolSettings[state.activeTool].width };
+            if (state.activeTool === 'eraser') {
+                recordHistory();
+                eraseAtPoint(coords);
+            } else if (state.activeTool === 'line' || state.activeTool === 'link') {
+                // Initialize straight line or link box
+                state.currentPath = { 
+                    type: state.activeTool, 
+                    start: coords, 
+                    points: [coords, coords], // index 0 is start, 1 is current end
+                    color: state.activeTool === 'link' ? state.toolSettings.link.color : state.toolSettings.line.color, 
+                    width: state.activeTool === 'link' ? 1 : state.toolSettings.line.width 
+                };
+            } else {
+                // Freehand
+                recordHistory();
+                state.currentPath = { type: state.activeTool, points: [coords], color: state.toolSettings[state.activeTool].color, width: state.toolSettings[state.activeTool].width };
                 if(!annotations[pageNum]) annotations[pageNum] = [];
                 annotations[pageNum].push(state.currentPath);
             }
@@ -506,24 +610,43 @@
     mainContent.addEventListener('pointermove', e => {
         if (!pointerCache.has(e.pointerId)) return;
         const last = pointerCache.get(e.pointerId);
+        const coords = getCanvasCoords(e);
 
         if (state.isDrawing) {
-            const { x, y } = getCanvasCoords(e);
-            if (state.activeTool === 'eraser') eraseAtPoint({x,y});
-            else { state.currentPath.points.push({x,y}); redrawAnnotations(); }
+            if (state.activeTool === 'eraser') {
+                eraseAtPoint(coords);
+            } else if (state.activeTool === 'line') {
+                // 2. Straight Line Preview
+                state.currentPath.points[1] = coords;
+                redrawAnnotations();
+            } else if (state.activeTool === 'link') {
+                // 3. Link Box Preview
+                const start = state.currentPath.start;
+                const w = coords.x - start.x;
+                const h = coords.y - start.y;
+                // Normalize rect for rendering
+                state.currentPath.x = w < 0 ? coords.x : start.x;
+                state.currentPath.y = h < 0 ? coords.y : start.y;
+                state.currentPath.w = Math.abs(w);
+                state.currentPath.h = Math.abs(h);
+                redrawAnnotations();
+            } else {
+                // Freehand
+                state.currentPath.points.push(coords); 
+                redrawAnnotations(); 
+            }
         } else if (pointerCache.size === 1) {
-            // Pan condition: Tool is pan OR using Finger (when not explicitly drawing)
+            // Pan logic
             const isPen = e.pointerType === 'pen';
-            if (state.activeTool === 'pan' || !isPen) {
+            if (state.activeTool === 'pan' || (!isPen && !state.isDrawing)) {
                 pdfContainer.classList.add('panning');
                 state.transform.offsetX += e.clientX - last.x;
                 state.transform.offsetY += e.clientY - last.y;
                 render();
             }
         } else if (pointerCache.size === 2) {
-            // Pinch
+            // Pinch Zoom
             const pointers = Array.from(pointerCache.values());
-            // Need accurate current positions
             const p1 = pointers[0].id === e.pointerId ? {x:e.clientX, y:e.clientY} : pointers[0];
             const p2 = pointers[1].id === e.pointerId ? {x:e.clientX, y:e.clientY} : pointers[1];
             
@@ -548,8 +671,33 @@
         pointerCache.delete(e.pointerId);
         if(pointerCache.size < 2) prevPinchDist = null;
         if(pointerCache.size === 0) pdfContainer.classList.remove('panning');
-        state.isDrawing = false; state.currentPath = null;
-        updateUndoRedoButtons();
+        
+        // Finalize drawing for Line or Link
+        if (state.isDrawing) {
+            if (state.activeTool === 'line') {
+                recordHistory();
+                if(!annotations[pageNum]) annotations[pageNum] = [];
+                annotations[pageNum].push(state.currentPath);
+            } else if (state.activeTool === 'link') {
+                // 3. Finalize Link creation
+                if (state.currentPath.w > 5 && state.currentPath.h > 5) {
+                    const url = prompt("Enter URL for this link:", "https://");
+                    if (url) {
+                        recordHistory();
+                        state.currentPath.url = url;
+                        // Clean up temp properties
+                        delete state.currentPath.points; delete state.currentPath.start;
+                        if(!annotations[pageNum]) annotations[pageNum] = [];
+                        annotations[pageNum].push(state.currentPath);
+                    }
+                }
+            }
+            
+            state.isDrawing = false; 
+            state.currentPath = null;
+            redrawAnnotations();
+            updateUndoRedoButtons();
+        }
     }
     mainContent.addEventListener('pointerup', handleUp);
     mainContent.addEventListener('pointercancel', handleUp);
@@ -559,7 +707,18 @@
     function eraseAtPoint({x,y}) {
         const arr = annotations[pageNum] || [];
         for(let i=arr.length-1; i>=0; i--) {
-            if(arr[i].points.some(p => Math.hypot(p.x-x, p.y-y) < state.toolSettings.eraser.width)) {
+            const a = arr[i];
+            let hit = false;
+            
+            // Check Link Hit
+            if (a.type === 'link') {
+                if (x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h) hit = true;
+            } else {
+                // Check Path Hit
+                if (a.points.some(p => Math.hypot(p.x-x, p.y-y) < state.toolSettings.eraser.width)) hit = true;
+            }
+
+            if(hit) {
                 arr.splice(i,1); redrawAnnotations(); break;
             }
         }
@@ -586,14 +745,18 @@
         document.querySelector('.tool-btn.active')?.classList.remove('active');
         b.classList.add('active');
         state.activeTool = b.dataset.tool;
+        
+        // Update PDF cursor based on tool
+        pdfContainer.setAttribute('data-tool', state.activeTool);
+        
         // Tool properties
         const t = state.activeTool;
         const propDiv = getEl('tool-properties');
         propDiv.innerHTML = '';
-        if(t==='draw'||t==='highlight'){
+        if(t==='draw'||t==='highlight'||t==='line'){
             propDiv.innerHTML = `<input type="color" id="tc" value="${state.toolSettings[t].color}"><input type="range" id="tw" min="1" max="40" value="${state.toolSettings[t].width}">`;
             getEl('tc').oninput=e=>state.toolSettings[t].color=e.target.value;
-            getEl('tw').oninput=e=>state.toolSettings[t].width=e.target.value;
+            getEl('tw').oninput=e=>state.toolSettings[t].width=parseInt(e.target.value);
         }
     });
     getEl('reset-view-btn').onclick = fitToScreen;
@@ -601,7 +764,6 @@
     // Boot
     openDB().then(() => {
         document.querySelector('[data-tool="pan"]').classList.add('active');
-        // If dock is open, refresh
         refreshDock();
     });
     window.addEventListener('resize', fitToScreen);
