@@ -3,126 +3,129 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PDF Editor with Dock</title>
+    <title>PDF Editor with File Dock</title>
     
     <style>
-        /* General Setup */
+        /* --- THEME & RESET --- */
         :root {
             --bg-dark: #202225; --bg-medium: #2f3136; --bg-light: #36393f;
-            --text-light: #ffffff; --text-muted: #dcddde; --accent: #5865f2;
-            --dock-height: 140px;
+            --text-light: #ffffff; --text-muted: #a0a0a0; --accent: #5865f2;
+            --dock-height: 160px;
         }
         html, body {
             margin: 0; padding: 0; height: 100%; width: 100%;
             overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg-light); color: var(--text-light);
-            touch-action: none; /* GLOBAL DISABLE SCROLL for App-like feel */
+            touch-action: none; /* PREVENTS BROWSER SCROLL/ZOOM */
         }
 
-        /* App Layout */
-        .app-container { display: flex; flex-direction: column; height: 100vh; }
-        
-        /* Main Viewport */
-        .main-content { 
-            flex-grow: 1; 
-            position: relative; 
-            background: var(--bg-light); 
-            overflow: hidden;
-            touch-action: none; /* CRITICAL: Allows pinch zoom to work without browser interference */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
+        .app-container { display: flex; flex-direction: column; height: 100vh; position: relative; }
 
-        /* Toolbar */
+        /* --- TOOLBAR --- */
         .toolbar {
             flex-shrink: 0; background-color: var(--bg-dark); padding: 8px 16px;
-            display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; 
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3); z-index: 1000;
+            display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3); z-index: 2000;
         }
-        .tool-group { display: flex; align-items: center; gap: 6px; border-left: 1px solid var(--bg-light); padding-left: 12px; }
+        .toolbar-section { display: flex; align-items: center; gap: 10px; }
+        
+        /* Buttons */
         .tool-btn {
-            background: none; border: 2px solid transparent; border-radius: 6px; padding: 6px; 
-            cursor: pointer; display: flex; align-items: center; justify-content: center;
-            color: var(--text-muted);
+            background: var(--bg-medium); border: 1px solid transparent; border-radius: 6px; padding: 8px 12px; 
+            cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+            color: var(--text-light); font-size: 14px; transition: all 0.2s;
         }
-        .tool-btn svg { width: 22px; height: 22px; stroke-width: 2; stroke: currentColor; }
-        .tool-btn:hover { background-color: var(--bg-medium); color: var(--text-light); }
-        .tool-btn.active { background-color: var(--accent); color: white; border-color: var(--accent); }
-        .tool-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-        #page-num-display { font-size: 14px; font-variant-numeric: tabular-nums; min-width: 80px; text-align: center; }
-
-        /* Tool Properties */
-        #tool-properties { display: flex; align-items: center; gap: 10px; }
-        input[type="color"] { border: none; width: 28px; height: 28px; padding: 0; background: none; cursor: pointer; }
+        .tool-btn svg { width: 18px; height: 18px; stroke-width: 2; stroke: currentColor; }
+        .tool-btn:hover { background-color: #40444b; }
+        .tool-btn.active { background-color: var(--accent); border-color: var(--accent); color: white; }
+        .tool-btn.file-tab-btn { background-color: #202225; border: 1px solid #444; }
+        .tool-btn.file-tab-btn.active { background-color: var(--bg-medium); border-color: var(--text-muted); }
+        
+        #tool-properties { display: flex; align-items: center; gap: 10px; padding-left: 10px; border-left: 1px solid #444; }
+        input[type="color"] { border: none; width: 24px; height: 24px; padding: 0; background: none; cursor: pointer; }
         input[type="range"] { width: 80px; cursor: pointer; }
 
-        /* PDF Canvas Area */
+        /* --- MAIN VIEWPORT --- */
+        .main-content { 
+            flex-grow: 1; position: relative; background: var(--bg-light); 
+            overflow: hidden; touch-action: none; 
+            display: flex; justify-content: center; align-items: center;
+        }
+
         #pdf-viewer-container {
             position: absolute; 
-            box-shadow: 0 0 30px rgba(0,0,0,0.5);
-            transform-origin: 0 0; /* Keeps zoom logic simple */
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
+            transform-origin: 0 0; 
             will-change: transform;
         }
         #pdf-viewer-container[data-tool="pan"] { cursor: grab; }
         #pdf-viewer-container[data-tool="pan"].panning { cursor: grabbing; }
         #pdf-canvas, #annotation-canvas { position: absolute; top: 0; left: 0; pointer-events: none; }
         
-        /* Page Navigation Zones */
+        /* Page Nav */
         .page-nav {
             position: absolute; top: 50%; transform: translateY(-50%);
-            width: 60px; height: 120px; background: rgba(0,0,0,0.1);
-            border-radius: 12px; display: flex; justify-content: center; align-items: center;
-            cursor: pointer; z-index: 500; opacity: 0; transition: opacity 0.2s;
+            width: 50px; height: 100px; background: rgba(0,0,0,0.2);
+            border-radius: 8px; display: flex; justify-content: center; align-items: center;
+            cursor: pointer; z-index: 500; opacity: 0; transition: opacity 0.2s; user-select: none;
         }
         .main-content:hover .page-nav { opacity: 1; }
-        .page-nav:hover { background: rgba(0,0,0,0.4); }
+        .page-nav:hover { background: rgba(0,0,0,0.5); }
         #prev-page-overlay { left: 10px; }
         #next-page-overlay { right: 10px; }
         .page-nav.disabled { display: none; }
 
-        /* DOCK SYSTEM */
-        .dock-container {
-            flex-shrink: 0;
+        /* --- THE DOCKER (FILE BROWSER) --- */
+        .dock-wrapper {
+            position: absolute; bottom: 0; left: 0; width: 100%;
             height: var(--dock-height);
-            background-color: var(--bg-dark);
-            border-top: 1px solid #111;
-            display: flex;
-            align-items: center;
-            overflow-x: auto;
-            padding: 0 20px;
-            gap: 15px;
-            z-index: 2000;
+            background-color: rgba(32, 34, 37, 0.95);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid var(--accent);
+            transform: translateY(100%); /* Hidden by default */
+            transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+            z-index: 3000;
+            display: flex; flex-direction: column;
         }
-        .dock-container::-webkit-scrollbar { height: 8px; }
-        .dock-container::-webkit-scrollbar-thumb { background: var(--bg-medium); border-radius: 4px; }
-        
-        .dock-item {
-            display: flex; flex-direction: column; align-items: center;
-            width: 90px; cursor: pointer; position: relative;
+        .dock-wrapper.open { transform: translateY(0); }
+
+        .dock-header {
+            padding: 8px 16px; display: flex; justify-content: space-between; align-items: center;
+            background: rgba(0,0,0,0.2); font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;
+        }
+        .close-dock-btn { background: none; border: none; color: var(--text-light); cursor: pointer; font-size: 18px; }
+
+        .dock-content {
+            flex-grow: 1; overflow-x: auto; overflow-y: hidden;
+            display: flex; align-items: center; gap: 20px; padding: 0 20px;
+        }
+        .dock-content::-webkit-scrollbar { height: 6px; }
+        .dock-content::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
+
+        .file-card {
+            display: flex; flex-direction: column; align-items: center; gap: 8px;
+            width: 100px; cursor: pointer; position: relative; flex-shrink: 0;
             transition: transform 0.2s;
-            flex-shrink: 0;
         }
-        .dock-item:hover { transform: translateY(-5px); }
-        .dock-thumb {
-            width: 80px; height: 80px; background: white;
-            border-radius: 8px; border: 2px solid var(--bg-medium);
-            object-fit: contain; background-color: #555;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        .file-card:hover { transform: translateY(-5px); }
+        .file-thumb {
+            width: 90px; height: 100px; object-fit: contain; background: #fff;
+            border-radius: 6px; border: 2px solid #444;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            transition: border-color 0.2s;
         }
-        .dock-item.active .dock-thumb { border-color: var(--accent); box-shadow: 0 0 10px var(--accent); }
-        .dock-label {
-            font-size: 11px; margin-top: 6px; text-align: center;
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;
-            color: var(--text-muted);
+        .file-card.active .file-thumb { border-color: var(--accent); box-shadow: 0 0 15px rgba(88, 101, 242, 0.4); }
+        .file-name { font-size: 11px; text-align: center; color: var(--text-muted); width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        
+        .delete-btn {
+            position: absolute; top: -5px; right: 0; width: 20px; height: 20px;
+            background: #ed4245; color: white; border-radius: 50%;
+            display: none; align-items: center; justify-content: center;
+            font-size: 14px; font-weight: bold;
         }
-        .dock-empty { color: var(--text-muted); width: 100%; text-align: center; font-style: italic; }
-        .delete-badge {
-            position: absolute; top: -5px; right: 0;
-            background: red; color: white; border-radius: 50%; width: 20px; height: 20px;
-            display: none; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;
-        }
-        .dock-item:hover .delete-badge { display: flex; }
+        .file-card:hover .delete-btn { display: flex; }
+        
+        .dock-empty { width: 100%; text-align: center; color: var(--text-muted); }
 
         /* Loading */
         #loading-overlay { 
@@ -136,32 +139,37 @@
 </head>
 <body>
     <div class="app-container">
-        <!-- Toolbar -->
+        <!-- TOOLBAR -->
         <div class="toolbar">
-            <input type="file" id="pdf-upload" accept="application/pdf" style="display: none;">
-            <div class="tool-group">
-                <!-- Using only the upload button now, files are in the dock -->
-                <button class="tool-btn" id="upload-btn" title="Open New PDF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg></button>
-                <button class="tool-btn" id="save-btn" disabled title="Save to Dock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg></button>
+            <div class="toolbar-section">
+                <!-- NEW FILE TAB BUTTON -->
+                <button class="tool-btn file-tab-btn" id="files-toggle-btn" title="Open File Docker">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    Files
+                </button>
+                <input type="file" id="pdf-upload" accept="application/pdf" style="display: none;">
+                <button class="tool-btn" id="upload-btn" title="New PDF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> New</button>
+                <button class="tool-btn" id="save-btn" disabled title="Save to Dock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg> Save</button>
+                <button class="tool-btn" id="download-btn" disabled title="Export File"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></button>
             </div>
-            <span id="page-num-display">No File</span>
-            <div class="tool-group">
-                <button class="tool-btn" id="undo-btn" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 14H6l-4-4 4-4h15v8zM3 10h18"></path></svg></button>
-                <button class="tool-btn" id="redo-btn" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 14h15l4-4-4-4H3v8zM21 10H3"></path></svg></button>
+
+            <div class="toolbar-section">
+                <span id="page-num-display" style="color: var(--text-muted); font-size: 13px;">No File</span>
+                <button class="tool-btn" id="undo-btn" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg></button>
+                <button class="tool-btn" id="redo-btn" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 7v6h-6"></path><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"></path></svg></button>
             </div>
-            <div class="tool-group">
-                <button class="tool-btn" data-tool="pan" title="Pan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
-                <button class="tool-btn" data-tool="draw" title="Pen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg></button>
-                <button class="tool-btn" data-tool="highlight" title="Marker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg></button>
-                <button class="tool-btn" data-tool="eraser" title="Eraser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20.24 7.76l-2.49-2.49a1.5 1.5 0 0 0-2.12 0L3.37 17.51l-1.37 4.86 4.86-1.37L19.12 8.88a1.5 1.5 0 0 0 0-2.12zM15 9l3 3"/></svg></button>
-            </div>
-            <div id="tool-properties" class="tool-group"></div>
-             <div class="tool-group">
-                <button class="tool-btn" id="reset-view-btn" title="Fit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
-                <button class="tool-btn" id="download-btn" disabled title="Export"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></button>
+
+            <div class="toolbar-section">
+                <button class="tool-btn" data-tool="pan" title="Pan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg></button>
+                <button class="tool-btn" data-tool="draw" title="Pen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg></button>
+                <button class="tool-btn" data-tool="highlight" title="Marker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg></button>
+                <button class="tool-btn" data-tool="eraser" title="Eraser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+                <div id="tool-properties"></div>
+                <button class="tool-btn" id="reset-view-btn" title="Fit View"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 3h6v6"></path><path d="M9 21H3v-6"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path></svg></button>
             </div>
         </div>
         
+        <!-- VIEWER -->
         <div class="main-content" id="main-content">
             <div id="pdf-viewer-container">
                 <canvas id="pdf-canvas"></canvas>
@@ -171,38 +179,47 @@
             <div id="next-page-overlay" class="page-nav disabled">›</div>
         </div>
 
-        <!-- THE DOCK -->
-        <div class="dock-container" id="dock-container">
-            <div class="dock-empty">Loading saved files...</div>
+        <!-- DOCKER (FILE BROWSER) -->
+        <div class="dock-wrapper" id="dock-wrapper">
+            <div class="dock-header">
+                <span>Local Library</span>
+                <button class="close-dock-btn" id="close-dock">&times;</button>
+            </div>
+            <div class="dock-content" id="dock-content">
+                <div class="dock-empty">Loading local files...</div>
+            </div>
         </div>
     </div>
     
     <div id="loading-overlay"><div class="spinner"></div></div>
 
+    <!-- SCRIPTS -->
     <script src="https://unpkg.com/pdfjs-dist@2.16.105/build/pdf.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 
     <script>
-    // --- SETUP ---
+    // --- INIT ---
     pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@2.16.105/build/pdf.worker.min.js`;
     
     const getEl = id => document.getElementById(id);
     const mainContent = getEl('main-content');
-    const uploadInput = getEl('pdf-upload'), uploadBtn = getEl('upload-btn'), saveBtn = getEl('save-btn');
     const pdfCanvas = getEl('pdf-canvas'), annotationCanvas = getEl('annotation-canvas');
     const pdfCtx = pdfCanvas.getContext('2d'), annotationCtx = annotationCanvas.getContext('2d');
-    const pageNumDisplay = getEl('page-num-display'), downloadBtn = getEl('download-btn');
     const pdfContainer = getEl('pdf-viewer-container');
-    const loadingOverlay = getEl('loading-overlay'), toolPropertiesContainer = getEl('tool-properties');
-    const prevPageOverlay = getEl('prev-page-overlay'), nextPageOverlay = getEl('next-page-overlay');
+    const dockWrapper = getEl('dock-wrapper'), dockContent = getEl('dock-content');
+    
+    // Buttons
+    const filesToggleBtn = getEl('files-toggle-btn'), closeDockBtn = getEl('close-dock');
+    const uploadBtn = getEl('upload-btn'), uploadInput = getEl('pdf-upload');
+    const saveBtn = getEl('save-btn'), downloadBtn = getEl('download-btn');
     const undoBtn = getEl('undo-btn'), redoBtn = getEl('redo-btn');
-    const dockContainer = getEl('dock-container');
-
-    // --- STATE ---
+    
+    // State
     let pdfDoc = null, originalPdfBytes = null, pageNum = 1, currentFileId = null;
     let annotations = {};
     let history = {}, redoStack = {};
     let isDbReady = false;
+    let db;
     
     const state = {
         transform: { scale: 1, offsetX: 0, offsetY: 0 },
@@ -213,76 +230,83 @@
     const pointerCache = new Map();
     let prevPinchDist = null;
 
-    // --- DB & DOCK ---
-    const DB_NAME = 'PDFEditorDockDB', DB_VERSION = 1;
-    let db;
-
+    // --- DB Setup ---
     function openDB() {
         return new Promise((resolve) => {
-            const req = indexedDB.open(DB_NAME, DB_VERSION);
+            const req = indexedDB.open('PDFEditorProDB', 1);
             req.onerror = () => { console.warn("DB Blocked"); resolve(null); };
             req.onsuccess = () => { db = req.result; isDbReady = true; resolve(db); };
             req.onupgradeneeded = e => {
                 const db = e.target.result;
-                // Files store: id, name, data, thumbnail
                 if(!db.objectStoreNames.contains('files')) db.createObjectStore('files', { keyPath: 'id' });
-                // Annotations store: fileId, data
                 if(!db.objectStoreNames.contains('annotations')) db.createObjectStore('annotations', { keyPath: 'fileId' });
             };
         });
     }
 
+    // --- DOCK LOGIC ---
+    function toggleDock() {
+        dockWrapper.classList.toggle('open');
+        filesToggleBtn.classList.toggle('active');
+        if (dockWrapper.classList.contains('open')) refreshDock();
+    }
+    
+    filesToggleBtn.onclick = toggleDock;
+    closeDockBtn.onclick = toggleDock;
+
     async function refreshDock() {
-        if (!isDbReady) { dockContainer.innerHTML = '<div class="dock-empty">Local Storage Unavailable</div>'; return; }
+        if (!isDbReady) { dockContent.innerHTML = '<div class="dock-empty">Storage unavailable</div>'; return; }
         const tx = db.transaction('files', 'readonly');
         const files = await tx.objectStore('files').getAll();
         
-        dockContainer.innerHTML = '';
+        dockContent.innerHTML = '';
         if (files.length === 0) {
-            dockContainer.innerHTML = '<div class="dock-empty">No saved files</div>';
-        } else {
-            files.forEach(file => {
-                const item = document.createElement('div');
-                item.className = `dock-item ${file.id === currentFileId ? 'active' : ''}`;
-                
-                // Use saved thumbnail or a generic placeholder
-                const thumbSrc = file.thumbnail || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2NjYyIgZD0iTTE0IDJINmEyIDIgMCAwIDAtMiAydjE2YTIgMiAwIDAgMCAyIDJoMTJhMiAyIDAgMCAwIDItMlY4bC02LTZ6bTEgN3Y1aDV6Ii8+PC9zdmc+';
-                
-                item.innerHTML = `
-                    <div class="delete-badge" title="Delete">×</div>
-                    <img src="${thumbSrc}" class="dock-thumb">
-                    <div class="dock-label">${file.name}</div>
-                `;
-                
-                // Click to load
-                item.onclick = async (e) => {
-                    if (e.target.classList.contains('delete-badge')) {
-                        e.stopPropagation();
-                        if (confirm(`Delete "${file.name}"?`)) {
-                            const txDel = db.transaction(['files', 'annotations'], 'readwrite');
-                            txDel.objectStore('files').delete(file.id);
-                            txDel.objectStore('annotations').delete(file.id);
-                            await txDel.done;
-                            if (currentFileId === file.id) window.location.reload();
-                            refreshDock();
-                        }
-                    } else if (file.id !== currentFileId) {
-                        const txLoad = db.transaction(['files', 'annotations'], 'readonly');
-                        const f = await txLoad.objectStore('files').get(file.id);
-                        const a = await txLoad.objectStore('annotations').get(file.id);
-                        await loadFile(f.id, f.data, a ? a.data : {}, f.name);
-                        refreshDock(); // update active state
-                    }
-                };
-                dockContainer.appendChild(item);
-            });
+            dockContent.innerHTML = '<div class="dock-empty">No saved files yet.<br>Click "Save" to add current file.</div>';
+            return;
         }
+
+        files.forEach(file => {
+            const card = document.createElement('div');
+            card.className = `file-card ${file.id === currentFileId ? 'active' : ''}`;
+            
+            // Thumbnail handling
+            const thumbSrc = file.thumbnail || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2NjYyIgZD0iTTE0IDJINmEyIDIgMCAwIDAtMiAydjE2YTIgMiAwIDAgMCAyIDJoMTJhMiAyIDAgMCAwIDItMlY4bC02LTZ6Ii8+PC9zdmc+';
+            
+            card.innerHTML = `
+                <div class="delete-btn" title="Delete">×</div>
+                <img src="${thumbSrc}" class="file-thumb">
+                <div class="file-name">${file.name}</div>
+            `;
+            
+            card.onclick = async (e) => {
+                if (e.target.classList.contains('delete-btn')) {
+                    e.stopPropagation();
+                    if (confirm(`Delete "${file.name}"?`)) {
+                        const txDel = db.transaction(['files', 'annotations'], 'readwrite');
+                        txDel.objectStore('files').delete(file.id);
+                        txDel.objectStore('annotations').delete(file.id);
+                        await txDel.done;
+                        if (currentFileId === file.id) window.location.reload();
+                        else refreshDock();
+                    }
+                } else if (file.id !== currentFileId) {
+                    // Load File
+                    getEl('loading-overlay').style.display = 'flex';
+                    const txLoad = db.transaction(['files', 'annotations'], 'readonly');
+                    const f = await txLoad.objectStore('files').get(file.id);
+                    const a = await txLoad.objectStore('annotations').get(file.id);
+                    await loadFile(f.id, f.data, a ? a.data : {}, f.name);
+                    toggleDock(); // close dock on selection
+                    getEl('loading-overlay').style.display = 'none';
+                }
+            };
+            dockContent.appendChild(card);
+        });
     }
 
-    // --- MAIN LOGIC ---
+    // --- PDF LOGIC ---
     function render() {
         if (!pdfDoc) return;
-        loadingOverlay.style.display = 'flex';
         
         pdfDoc.getPage(pageNum).then(page => {
             const scaleFactor = 1.5; 
@@ -297,10 +321,9 @@
             
             page.render({ canvasContext: pdfCtx, viewport: viewport }).promise.then(() => {
                 redrawAnnotations();
-                loadingOverlay.style.display = 'none';
             });
         });
-        pageNumDisplay.textContent = `${pageNum} / ${pdfDoc.numPages}`;
+        getEl('page-num-display').textContent = `Page ${pageNum}`;
         updatePageNavButtons();
     }
     
@@ -323,7 +346,7 @@
         pdfDoc.getPage(pageNum).then(page => {
             const viewport = page.getViewport({ scale: 1.5 });
             const rect = mainContent.getBoundingClientRect();
-            const scale = Math.min((rect.width / viewport.width) * 0.9, (rect.height / viewport.height) * 0.9);
+            const scale = Math.min((rect.width / viewport.width) * 0.95, (rect.height / viewport.height) * 0.95);
             const offsetX = (rect.width - (viewport.width * scale)) / 2;
             const offsetY = (rect.height - (viewport.height * scale)) / 2;
             state.transform = { scale, offsetX, offsetY };
@@ -338,51 +361,50 @@
         history = {}; redoStack = {};
         pdfDoc = await pdfjsLib.getDocument(new Uint8Array(originalPdfBytes)).promise;
         pageNum = 1;
-        document.title = name ? name : "PDF Editor";
+        document.title = name || "PDF Editor";
         fitToScreen();
-        [saveBtn, downloadBtn].forEach(b => b.disabled = false);
+        [saveBtn, downloadBtn, undoBtn, redoBtn].forEach(b => b.disabled = false);
+        // If save button was disabled (new file), enable it
+        saveBtn.disabled = false;
+        downloadBtn.disabled = false;
         updateUndoRedoButtons();
     }
 
-    // --- EVENT LISTENERS ---
+    // --- ACTIONS ---
     uploadBtn.onclick = () => uploadInput.click();
     uploadInput.onchange = async e => {
         const file = e.target.files[0]; if (!file) return;
         const buffer = await file.arrayBuffer();
         await loadFile(null, buffer, {}, file.name);
-        refreshDock();
     };
 
     saveBtn.onclick = async () => {
-        if (!pdfDoc) return;
-        if (!isDbReady) { alert("Database error"); return; }
+        if (!pdfDoc || !isDbReady) return;
         
         let fileId = currentFileId;
         let fileName = document.title;
 
         if (!fileId) {
-            fileName = prompt("Name this file:", fileName.replace('*', ''));
+            fileName = prompt("File Name:", fileName.replace('*', ''));
             if (!fileName) return;
             fileId = Date.now();
         }
 
-        loadingOverlay.style.display = 'flex';
+        getEl('loading-overlay').style.display = 'flex';
 
-        // GENERATE THUMBNAIL (Take screenshot of current view)
-        // We draw the PDF canvas onto a smaller canvas
+        // 1. Capture Thumbnail
         const thumbCvs = document.createElement('canvas');
-        const thumbSize = 100; // px
+        const thumbSize = 120;
         const ratio = pdfCanvas.width / pdfCanvas.height;
         thumbCvs.width = thumbSize;
         thumbCvs.height = thumbSize / ratio;
         const tCtx = thumbCvs.getContext('2d');
-        // White background
-        tCtx.fillStyle = '#fff';
-        tCtx.fillRect(0, 0, thumbCvs.width, thumbCvs.height);
-        tCtx.drawImage(pdfCanvas, 0, 0, thumbCvs.width, thumbCvs.height);
-        const thumbnailData = thumbCvs.toDataURL('image/jpeg', 0.7);
+        tCtx.fillStyle = '#fff'; tCtx.fillRect(0,0,thumbCvs.width,thumbCvs.height);
+        tCtx.drawImage(pdfCanvas, 0,0,thumbCvs.width,thumbCvs.height);
+        tCtx.drawImage(annotationCanvas, 0,0,thumbCvs.width,thumbCvs.height);
+        const thumbnailData = thumbCvs.toDataURL('image/jpeg', 0.6);
 
-        // SAVE TO DB
+        // 2. Save
         const fileData = { id: fileId, name: fileName, data: originalPdfBytes, thumbnail: thumbnailData };
         const annoData = { fileId, data: annotations };
         
@@ -393,11 +415,53 @@
         
         currentFileId = fileId;
         document.title = fileName;
-        loadingOverlay.style.display = 'none';
-        refreshDock();
+        getEl('loading-overlay').style.display = 'none';
+        
+        // Refresh dock if open
+        if(dockWrapper.classList.contains('open')) refreshDock();
+        else {
+            // Optional: Blink Files button to show success?
+            const originalText = filesToggleBtn.innerHTML;
+            filesToggleBtn.innerHTML = "✓ Saved";
+            setTimeout(() => filesToggleBtn.innerHTML = originalText, 1500);
+        }
     };
 
-    // --- POINTER & ZOOM LOGIC ---
+    downloadBtn.onclick = async () => {
+        if (!pdfDoc) return;
+        getEl('loading-overlay').style.display = 'flex';
+        const { PDFDocument } = PDFLib; 
+        const pdfDocToModify = await PDFDocument.load(originalPdfBytes);
+        const renderScale = 1.5;
+        
+        for (const pn in annotations) {
+            const idx = parseInt(pn)-1;
+            if(idx >= pdfDocToModify.getPageCount()) continue;
+            const page = pdfDocToModify.getPages()[idx];
+            const { width, height } = page.getSize();
+            
+            let paths = (annotations[pn]||[]).map(a => {
+                const d = a.points.map((p,i) => {
+                    const x = p.x / renderScale;
+                    const y = height - (p.y / renderScale);
+                    return (i===0?'M':'L')+`${x.toFixed(2)} ${y.toFixed(2)}`;
+                }).join(' ');
+                return `<path d="${d}" stroke="${a.color}" stroke-width="${a.width/renderScale}" fill="none" stroke-opacity="${a.type==='highlight'?0.4:1}" stroke-linecap="round" stroke-linejoin="round"/>`;
+            }).join('');
+            
+            if(paths) {
+                const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">${paths}</svg>`;
+                page.drawSvg(await pdfDocToModify.embedSvg(svg), {x:0, y:0, width, height});
+            }
+        }
+        const bytes = await pdfDocToModify.save();
+        const blob = new Blob([bytes], {type:'application/pdf'});
+        const link = document.createElement('a'); link.href=URL.createObjectURL(blob); link.download=document.title+'.pdf';
+        link.click();
+        getEl('loading-overlay').style.display = 'none';
+    };
+
+    // --- INPUT HANDLING ---
     function getCanvasCoords(e) {
         const rect = annotationCanvas.getBoundingClientRect();
         const scaleX = annotationCanvas.width / rect.width;
@@ -406,17 +470,14 @@
     }
 
     mainContent.addEventListener('wheel', e => {
-        if(e.ctrlKey) e.preventDefault(); // Browser zoom
+        if(e.ctrlKey) e.preventDefault();
         e.preventDefault();
-        const rect = pdfContainer.getBoundingClientRect();
+        const rect = mainContent.getBoundingClientRect();
         const { scale } = state.transform;
         const newScale = e.deltaY < 0 ? scale * 1.1 : scale / 1.1;
         
-        // Mouse position relative to wrapper
-        const wrapperRect = mainContent.getBoundingClientRect();
-        const mouseX = e.clientX - wrapperRect.left;
-        const mouseY = e.clientY - wrapperRect.top;
-        
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
         state.transform.offsetX = mouseX - (mouseX - state.transform.offsetX) * (newScale / scale);
         state.transform.offsetY = mouseY - (mouseY - state.transform.offsetY) * (newScale / scale);
         state.transform.scale = newScale;
@@ -426,113 +487,80 @@
     mainContent.addEventListener('pointerdown', e => {
         if (!pdfDoc) return;
         pointerCache.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        
         const isPen = e.pointerType === 'pen';
         
-        if (state.activeTool === 'pan' || (e.pointerType === 'touch' && !isPen && state.activeTool !== 'pan')) {
-            // Touch always pans unless it's a pen (or if tool is explicitly pan)
-            // Wait, if tool is draw, finger should pan? 
-            // Standard behavior: One finger pan, Pen draws.
-            // Let's enforce: Pen draws if tool != pan. Finger always pans/zooms.
-            if (e.pointerType === 'touch' && state.activeTool !== 'pan') return; 
-        }
-
-        if (isPen && (state.activeTool === 'draw' || state.activeTool === 'highlight')) {
+        if (state.activeTool !== 'pan' && isPen) {
+            // Draw
             state.isDrawing = true;
             recordHistory();
             const { x, y } = getCanvasCoords(e);
-            state.currentPath = { type: state.activeTool, points: [{x,y}], color: state.toolSettings[state.activeTool].color, width: state.toolSettings[state.activeTool].width };
-            if(!annotations[pageNum]) annotations[pageNum] = [];
-            annotations[pageNum].push(state.currentPath);
-        } else if (state.activeTool === 'eraser' && isPen) {
-            state.isDrawing = true;
-            recordHistory();
-            eraseAtPoint(getCanvasCoords(e));
-        } else if (state.activeTool === 'pan') {
-             // Prepare pan
+            if (state.activeTool === 'eraser') eraseAtPoint({x,y});
+            else {
+                state.currentPath = { type: state.activeTool, points: [{x,y}], color: state.toolSettings[state.activeTool].color, width: state.toolSettings[state.activeTool].width };
+                if(!annotations[pageNum]) annotations[pageNum] = [];
+                annotations[pageNum].push(state.currentPath);
+            }
         }
     });
 
     mainContent.addEventListener('pointermove', e => {
         if (!pointerCache.has(e.pointerId)) return;
         const last = pointerCache.get(e.pointerId);
-        
+
         if (state.isDrawing) {
             const { x, y } = getCanvasCoords(e);
             if (state.activeTool === 'eraser') eraseAtPoint({x,y});
             else { state.currentPath.points.push({x,y}); redrawAnnotations(); }
         } else if (pointerCache.size === 1) {
-            // Single finger/mouse pan
-            // Only pan if we aren't trying to draw with finger (which we disabled above)
-            // or if tool is Pan
+            // Pan condition: Tool is pan OR using Finger (when not explicitly drawing)
             const isPen = e.pointerType === 'pen';
-            const shouldPan = state.activeTool === 'pan' || (!isPen && !state.isDrawing);
-            
-            if (shouldPan) {
+            if (state.activeTool === 'pan' || !isPen) {
                 pdfContainer.classList.add('panning');
                 state.transform.offsetX += e.clientX - last.x;
                 state.transform.offsetY += e.clientY - last.y;
                 render();
             }
         } else if (pointerCache.size === 2) {
-            // PINCH ZOOM
+            // Pinch
             const pointers = Array.from(pointerCache.values());
-            const p1 = pointers[0], p2 = pointers[1];
-            // Current pointers are stored in cache, but we need current EVENT coordinates for the moving one
-            // Update the one moving
-            if (e.pointerId === p1.id) { p1.x = e.clientX; p1.y = e.clientY; } // Wait, Map stores objects by ref? No.
-            // We need to update cache every move at end
+            // Need accurate current positions
+            const p1 = pointers[0].id === e.pointerId ? {x:e.clientX, y:e.clientY} : pointers[0];
+            const p2 = pointers[1].id === e.pointerId ? {x:e.clientX, y:e.clientY} : pointers[1];
             
-            // Re-read current positions from event? No, `last` is old pos. 
-            // We need valid current positions of both fingers.
-            // PointerCache stores the LAST known position.
-            // We need to update the specific pointer that moved.
-            
-            // Find the other pointer
-            let otherId = null;
-            for(let k of pointerCache.keys()) if(k !== e.pointerId) otherId = k;
-            const other = pointerCache.get(otherId);
-            
-            const dist = Math.hypot(e.clientX - other.x, e.clientY - other.y);
-            
+            const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
             if (prevPinchDist) {
                 const oldScale = state.transform.scale;
                 const newScale = oldScale * (dist / prevPinchDist);
-                const midX = (e.clientX + other.x) / 2;
-                const midY = (e.clientY + other.y) / 2;
+                const midX = (p1.x + p2.x) / 2 - mainContent.getBoundingClientRect().left;
+                const midY = (p1.y + p2.y) / 2 - mainContent.getBoundingClientRect().top;
                 
-                const rect = mainContent.getBoundingClientRect();
-                const midInWrapperX = midX - rect.left;
-                const midInWrapperY = midY - rect.top;
-                
-                state.transform.offsetX = midInWrapperX - (midInWrapperX - state.transform.offsetX) * (newScale / oldScale);
-                state.transform.offsetY = midInWrapperY - (midInWrapperY - state.transform.offsetY) * (newScale / oldScale);
+                state.transform.offsetX = midX - (midX - state.transform.offsetX) * (newScale / oldScale);
+                state.transform.offsetY = midY - (midY - state.transform.offsetY) * (newScale / oldScale);
                 state.transform.scale = newScale;
                 render();
             }
             prevPinchDist = dist;
         }
-        
-        pointerCache.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        pointerCache.set(e.pointerId, { x: e.clientX, y: e.clientY, id: e.pointerId });
     });
 
-    function handlePointerUp(e) {
+    function handleUp(e) {
         pointerCache.delete(e.pointerId);
-        if (pointerCache.size < 2) prevPinchDist = null;
-        if (pointerCache.size < 1) pdfContainer.classList.remove('panning');
+        if(pointerCache.size < 2) prevPinchDist = null;
+        if(pointerCache.size === 0) pdfContainer.classList.remove('panning');
         state.isDrawing = false; state.currentPath = null;
         updateUndoRedoButtons();
     }
-    mainContent.addEventListener('pointerup', handlePointerUp);
-    mainContent.addEventListener('pointercancel', handlePointerUp);
-    mainContent.addEventListener('pointerleave', handlePointerUp);
+    mainContent.addEventListener('pointerup', handleUp);
+    mainContent.addEventListener('pointercancel', handleUp);
+    mainContent.addEventListener('pointerleave', handleUp);
 
     // --- UTILS ---
     function eraseAtPoint({x,y}) {
         const arr = annotations[pageNum] || [];
         for(let i=arr.length-1; i>=0; i--) {
             if(arr[i].points.some(p => Math.hypot(p.x-x, p.y-y) < state.toolSettings.eraser.width)) {
-                arr.splice(i,1); redrawAnnotations(); break; 
+                arr.splice(i,1); redrawAnnotations(); break;
             }
         }
     }
@@ -541,53 +569,42 @@
         history[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum]||[])));
         redoStack[pageNum]=[];
     }
-    undoBtn.onclick = () => {
-        if(history[pageNum]?.length) {
-            redoStack[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum])));
-            annotations[pageNum] = history[pageNum].pop(); redrawAnnotations(); updateUndoRedoButtons();
-        }
-    }
-    redoBtn.onclick = () => {
-        if(redoStack[pageNum]?.length) {
-            history[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum])));
-            annotations[pageNum] = redoStack[pageNum].pop(); redrawAnnotations(); updateUndoRedoButtons();
-        }
-    }
     function updateUndoRedoButtons(){
         undoBtn.disabled = !history[pageNum]?.length; redoBtn.disabled = !redoStack[pageNum]?.length;
     }
+    undoBtn.onclick = () => { if(history[pageNum]?.length) { redoStack[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum]))); annotations[pageNum]=history[pageNum].pop(); redrawAnnotations(); updateUndoRedoButtons(); }};
+    redoBtn.onclick = () => { if(redoStack[pageNum]?.length) { history[pageNum].push(JSON.parse(JSON.stringify(annotations[pageNum]))); annotations[pageNum]=redoStack[pageNum].pop(); redrawAnnotations(); updateUndoRedoButtons(); }};
+    
     function updatePageNavButtons(){
-        prevPageOverlay.classList.toggle('disabled', pageNum<=1);
-        nextPageOverlay.classList.toggle('disabled', pageNum>=pdfDoc.numPages);
+        getEl('prev-page-overlay').classList.toggle('disabled', pageNum<=1);
+        getEl('next-page-overlay').classList.toggle('disabled', pageNum>=pdfDoc.numPages);
     }
-    prevPageOverlay.onclick = () => {if(pageNum>1){pageNum--; render();}};
-    nextPageOverlay.onclick = () => {if(pageNum<pdfDoc.numPages){pageNum++; render();}};
+    getEl('prev-page-overlay').onclick = () => {if(pageNum>1){pageNum--; render();}};
+    getEl('next-page-overlay').onclick = () => {if(pageNum<pdfDoc.numPages){pageNum++; render();}};
+    
     document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.onclick = () => {
         document.querySelector('.tool-btn.active')?.classList.remove('active');
         b.classList.add('active');
         state.activeTool = b.dataset.tool;
-        pdfContainer.dataset.tool = state.activeTool;
         // Tool properties
         const t = state.activeTool;
-        toolPropertiesContainer.innerHTML = '';
+        const propDiv = getEl('tool-properties');
+        propDiv.innerHTML = '';
         if(t==='draw'||t==='highlight'){
-            toolPropertiesContainer.innerHTML = `<input type="color" id="tc" value="${state.toolSettings[t].color}"><input type="range" id="tw" min="1" max="40" value="${state.toolSettings[t].width}">`;
+            propDiv.innerHTML = `<input type="color" id="tc" value="${state.toolSettings[t].color}"><input type="range" id="tw" min="1" max="40" value="${state.toolSettings[t].width}">`;
             getEl('tc').oninput=e=>state.toolSettings[t].color=e.target.value;
             getEl('tw').oninput=e=>state.toolSettings[t].width=e.target.value;
         }
     });
-    document.getElementById('reset-view-btn').onclick = fitToScreen;
+    getEl('reset-view-btn').onclick = fitToScreen;
     
-    // --- INIT ---
+    // Boot
     openDB().then(() => {
-        setActiveTool('pan');
-        // Pre-select pan button
         document.querySelector('[data-tool="pan"]').classList.add('active');
+        // If dock is open, refresh
         refreshDock();
     });
     window.addEventListener('resize', fitToScreen);
-    
-    function setActiveTool(t) { state.activeTool = t; pdfContainer.dataset.tool = t; }
 
     </script>
 </body>
