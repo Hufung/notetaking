@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My PDF Library</title>
+    <style>
+        :root {
+            --bg-dark: #202225; --bg-medium: #2f3136; --bg-light: #36393f;
+            --text-light: #ffffff; --text-muted: #a0a0a0; --accent: #5865f2;
+        }
+        body {
+            margin: 0; padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-dark); color: var(--text-light);
+        }
+        
+        .header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 30px; border-bottom: 1px solid #444; padding-bottom: 20px;
+        }
+        h1 { margin: 0; font-size: 24px; font-weight: 500; }
+        
+        .btn {
+            background: var(--accent); color: white; text-decoration: none;
+            padding: 10px 20px; border-radius: 6px; font-size: 14px;
+            border: none; cursor: pointer; transition: opacity 0.2s;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn-secondary { background: var(--bg-light); border: 1px solid #555; }
+        
+        .file-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 25px;
+        }
+        
+        .file-card {
+            background: var(--bg-medium); border-radius: 8px; padding: 10px;
+            display: flex; flex-direction: column; align-items: center; gap: 10px;
+            cursor: pointer; transition: transform 0.2s, background 0.2s;
+            position: relative;
+        }
+        .file-card:hover { transform: translateY(-5px); background: #3a3e44; }
+        
+        .file-thumb {
+            width: 100%; aspect-ratio: 1/1.3; object-fit: contain;
+            background: #fff; border-radius: 4px; border: 1px solid #555;
+        }
+        
+        .file-name {
+            font-size: 13px; text-align: center; color: var(--text-light);
+            width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        
+        .delete-btn {
+            position: absolute; top: -8px; right: -8px;
+            width: 24px; height: 24px; background: #ed4245; color: white;
+            border-radius: 50%; display: none; align-items: center; justify-content: center;
+            font-size: 16px; font-weight: bold; border: 2px solid var(--bg-dark);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+        .file-card:hover .delete-btn { display: flex; }
+        
+        .empty-state {
+            grid-column: 1 / -1; text-align: center; color: var(--text-muted);
+            margin-top: 50px; font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>Local Library</h1>
+        <div>
+            <a href="index.html" class="btn btn-secondary">New Empty Editor</a>
+        </div>
+    </div>
+
+    <div class="file-grid" id="file-grid">
+        <div class="empty-state">Loading files...</div>
+    </div>
+
+    <script>
+        let db;
+        const grid = document.getElementById('file-grid');
+
+        function openDB() {
+            return new Promise((resolve) => {
+                const req = indexedDB.open('PDFEditorProDB', 1);
+                req.onerror = () => { console.warn("DB Blocked"); resolve(null); };
+                req.onsuccess = () => { db = req.result; resolve(db); };
+                req.onupgradeneeded = e => {
+                    const db = e.target.result;
+                    if(!db.objectStoreNames.contains('files')) db.createObjectStore('files', { keyPath: 'id' });
+                    if(!db.objectStoreNames.contains('annotations')) db.createObjectStore('annotations', { keyPath: 'fileId' });
+                };
+            });
+        }
+
+        async function loadFiles() {
+            if (!db) return;
+            const tx = db.transaction('files', 'readonly');
+            const files = await tx.objectStore('files').getAll();
+            
+            grid.innerHTML = '';
+            
+            if (files.length === 0) {
+                grid.innerHTML = '<div class="empty-state">No saved files yet.<br>Create a new PDF in the editor to see it here.</div>';
+                return;
+            }
+
+            files.forEach(file => {
+                const card = document.createElement('div');
+                card.className = 'file-card';
+                
+                // Thumbnail logic
+                const thumbSrc = file.thumbnail || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2NjYyIgZD0iTTE0IDJINmEyIDIgMCAwIDAtMiAydjE2YTIgMiAwIDAgMCAyIDJoMTJhMiAyIDAgMCAwIDItMlY4bC02LTZ6Ii8+PC9zdmc+';
+
+                card.innerHTML = `
+                    <div class="delete-btn" title="Delete File">&times;</div>
+                    <img src="${thumbSrc}" class="file-thumb">
+                    <div class="file-name">${file.name}</div>
+                `;
+
+                // Handle Clicks
+                card.onclick = (e) => {
+                    // Handle Delete
+                    if (e.target.classList.contains('delete-btn')) {
+                        e.stopPropagation();
+                        if (confirm(`Delete "${file.name}"? This cannot be undone.`)) {
+                            const txDel = db.transaction(['files', 'annotations'], 'readwrite');
+                            txDel.objectStore('files').delete(file.id);
+                            txDel.objectStore('annotations').delete(file.id);
+                            txDel.oncomplete = () => loadFiles(); // Reload grid
+                        }
+                    } 
+                    // Handle Open
+                    else {
+                        window.location.href = `index.html?id=${file.id}`;
+                    }
+                };
+
+                grid.appendChild(card);
+            });
+        }
+
+        openDB().then(() => loadFiles());
+    </script>
+</body>
+</html>
